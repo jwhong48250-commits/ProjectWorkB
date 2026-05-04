@@ -811,7 +811,10 @@ export default function LivePage() {
               ) : (
                 <span className="w-4 h-4 rounded-full border-2 border-accent border-t-transparent animate-spin shrink-0" />
               )}
-              <h2 id="meeting-ending-title" className="text-sm font-semibold text-foreground">
+              <h2
+                id="meeting-ending-title"
+                className="text-sm font-semibold text-foreground"
+              >
                 {wsStatus === "done"
                   ? "회의록 화면으로 이동 중입니다"
                   : "회의 종료를 처리하고 있습니다"}
