@@ -4,7 +4,10 @@ import type { WbsStatus, WbsPriority } from '../types/wbs'
 export interface WbsTaskApi {
   id: number; epic_id: number; title: string
   assignee_id: number | null; assignee_name: string | null; priority: string
+  urgency: string | null
   due_date: string | null; progress: number; status: string
+  jira_issue_id: string | null
+  order_index: number
 }
 export interface WbsEpicApi {
   id: number; title: string; order_index: number; tasks: WbsTaskApi[]
@@ -46,3 +49,9 @@ export const deleteEpic = (m: string | number, w: number, epicId: number) =>
 
 export const deleteTask = (m: string | number, w: number, taskId: number) =>
   apiRequest<{ status: string }>(u(m, w, `/tasks/${taskId}`), { method: 'DELETE' })
+
+export const reorderWbs = (
+  m: string | number, w: number,
+  body: { epics?: { id: number; order_index: number }[]; tasks?: { id: number; order_index: number }[] },
+) =>
+  apiRequest<{ status: string }>(u(m, w, '/reorder'), { method: 'PATCH', body: JSON.stringify(body) })

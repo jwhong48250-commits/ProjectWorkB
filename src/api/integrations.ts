@@ -12,6 +12,7 @@ export interface IntegrationItem {
   selected_channel_id?: string
   selected_calendar_id?: string
   selected_calendar_name?: string
+  selected_project_key?: string
 }
 
 export interface IntegrationListResponse {
@@ -41,6 +42,26 @@ export function getOAuthUrl(service: OAuthService, workspaceId: number) {
   )
 }
 
+// --- JIRA 사이트 선택 (멀티 사이트) ---
+export interface JiraSite {
+  id: string
+  name: string
+  url: string
+}
+
+export function getJiraSites(workspaceId: number) {
+  return apiFetch<{ sites: JiraSite[] }>(
+    `/integrations/workspaces/${workspaceId}/jira/sites`
+  )
+}
+
+export function selectJiraSite(workspaceId: number, cloudId: string, siteUrl: string) {
+  return apiFetch<{ status: string }>(
+    `/integrations/workspaces/${workspaceId}/jira/site/select`,
+    { method: 'POST', body: JSON.stringify({ cloud_id: cloudId, site_url: siteUrl }) }
+  )
+}
+
 // --- JIRA OAuth 후속 설정 ---
 export function getJiraProjects(workspaceId: number) {
   return apiFetch<{ projects: JiraProject[] }>(
@@ -65,6 +86,13 @@ export function saveJiraMapping(workspaceId: number, statusMapping: Record<strin
   return apiFetch<{ status: string }>(
     `/integrations/workspaces/${workspaceId}/jira/mapping`,
     { method: 'POST', body: JSON.stringify({ status_mapping: statusMapping }) }
+  )
+}
+
+export function resetJiraLinks(workspaceId: number) {
+  return apiFetch<{ status: string }>(
+    `/integrations/workspaces/${workspaceId}/jira/reset-links`,
+    { method: 'POST' },
   )
 }
 
