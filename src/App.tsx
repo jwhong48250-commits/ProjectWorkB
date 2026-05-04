@@ -4,7 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import AppShell from './components/layout/AppShell'
 import AuthLayout from './components/layout/AuthLayout'
 import FullscreenLayout from './components/layout/FullscreenLayout'
-import { PublicOnlyRoute, RequireAdminRoute, RequireAuthRoute, RequireMeetingCreatorRoute } from './components/auth/AuthGuards'
+import { PublicOnlyRoute, RequireAuthRoute, RequireMeetingCreatorRoute, RequireWorkspaceAdminRoute } from './components/auth/AuthGuards'
 
 // Auth pages
 import LoginPage from './pages/auth/LoginPage'
@@ -120,7 +120,7 @@ export default function App() {
           <Route path="settings" element={<Navigate to="/settings/my" replace />} />
           <Route path="settings/my" element={<MyPage />} />
           <Route path="settings/password" element={<PasswordSettingsPage />} />
-          <Route element={<RequireAdminRoute />}>
+          <Route element={<RequireWorkspaceAdminRoute />}>
             <Route path="settings/workspace" element={<WorkspaceSettingsPage />} />
             <Route path="settings/members" element={<MembersSettingsPage />} />
             <Route path="settings/departments" element={<DepartmentsSettingsPage />} />
