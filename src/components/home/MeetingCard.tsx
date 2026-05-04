@@ -19,6 +19,10 @@ function getMeetingRoute(meeting: Meeting): string {
 }
 
 function goToMeeting(navigate: ReturnType<typeof useNavigate>, meeting: Meeting) {
+  if (meeting.status === 'inprogress') {
+    window.alert('진행 중인 회의라 입장하실 수 없습니다.')
+    return
+  }
   const route = getMeetingRoute(meeting)
   if (!route.startsWith('/live/')) persistMeetingSnapshot(meeting)
   navigate(route)
@@ -26,6 +30,8 @@ function goToMeeting(navigate: ReturnType<typeof useNavigate>, meeting: Meeting)
 
 export default function MeetingCard({ meeting }: MeetingCardProps) {
   const navigate = useNavigate()
+
+  const isInProgress = meeting.status === 'inprogress'
 
   return (
     <article
@@ -39,11 +45,10 @@ export default function MeetingCard({ meeting }: MeetingCardProps) {
         }
       }}
       className={clsx(
-        'group flex flex-col gap-2.5 p-3.5 rounded-lg border bg-card cursor-pointer',
-        'hover:shadow-card-hover hover:border-accent/25 transition-all duration-quick',
-        meeting.status === 'inprogress'
-          ? 'border-status-inprogress/25 ring-1 ring-status-inprogress/15'
-          : 'border-border',
+        'group flex flex-col gap-2.5 p-3.5 rounded-lg border bg-card',
+        isInProgress
+          ? 'cursor-default border-status-inprogress/25 ring-1 ring-status-inprogress/15'
+          : 'cursor-pointer hover:shadow-card-hover hover:border-accent/25 transition-all duration-quick border-border',
       )}
     >
       {/* Top row: status badge + time */}

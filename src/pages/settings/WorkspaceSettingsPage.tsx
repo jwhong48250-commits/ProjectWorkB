@@ -10,6 +10,7 @@ import {
   getWorkspaceLogoUrl,
   setWorkspaceLogoUrl,
 } from "../../utils/workspaceLogo";
+import { getCurrentWorkspaceRole } from "../../utils/workspace";
 
 const SUMMARY_STYLES = [
   "간결형 (결정사항·액션아이템 중심)",
@@ -31,7 +32,8 @@ function readFileAsDataUrl(file: File): Promise<string> {
 
 export default function WorkspaceSettingsPage() {
   const navigate = useNavigate();
-  const { isAdmin, signOut } = useAuth();
+  const { signOut } = useAuth();
+  const isWorkspaceAdmin = getCurrentWorkspaceRole() === "admin";
   const [teamName, setTeamName] = useState("Workb 팀");
   const [industry, setIndustry] = useState("");
   const [language, setLanguage] = useState("한국어");
@@ -339,7 +341,7 @@ export default function WorkspaceSettingsPage() {
         </button>
       </form>
 
-      {isAdmin && (
+      {isWorkspaceAdmin && (
         <div className="mt-6 rounded-xl border border-red-200/80 bg-red-50/70 p-4 dark:border-red-900/45 dark:bg-red-950/10">
           <div className="mb-3 flex items-start gap-3">
             <Trash2 size={20} className="mt-0.5 shrink-0 text-red-600 dark:text-red-400" />

@@ -87,6 +87,120 @@ export function deleteNextMeeting(
 }
 
 
+// ── JIRA ──────────────────────────────────────────────────────────────
+export interface JiraPreviewTask {
+  id: number
+  title: string
+  action: 'create' | 'update'
+}
+
+export interface JiraPreviewEpic {
+  id: number
+  title: string
+  action: 'create' | 'update'
+  tasks: JiraPreviewTask[]
+}
+
+export interface JiraPreviewResult {
+  epics:        JiraPreviewEpic[]
+  epic_create:  number
+  epic_update:  number
+  task_create:  number
+  task_update:  number
+  total:        number
+}
+
+export interface JiraSelectiveBody {
+  epic_ids?: number[]
+  task_ids?: number[]
+}
+
+export function exportJira(meetingId: string | number, workspaceId: number) {
+  return apiFetch<{ status: string }>(
+    `/actions/meetings/${meetingId}/export/jira?workspace_id=${workspaceId}`,
+    { method: 'POST' },
+  )
+}
+
+export function previewJira(
+  meetingId: string | number,
+  workspaceId: number,
+  body: JiraSelectiveBody = {},
+) {
+  return apiFetch<JiraPreviewResult>(
+    `/actions/meetings/${meetingId}/export/jira/preview?workspace_id=${workspaceId}`,
+    { method: 'POST', body: JSON.stringify(body) },
+  )
+}
+
+export function exportJiraSelective(
+  meetingId: string | number,
+  workspaceId: number,
+  body: JiraSelectiveBody = {},
+) {
+  return apiFetch<{ status: string }>(
+    `/actions/meetings/${meetingId}/export/jira/selective?workspace_id=${workspaceId}`,
+    { method: 'POST', body: JSON.stringify(body) },
+  )
+}
+
+export interface JiraExportResult {
+  created: number
+  updated: number
+  failed: string[]
+}
+
+export async function streamJiraExport(
+  meetingId: string | number,
+  workspaceId: number,
+  body: JiraSelectiveBody = {},
+  onProgress: (done: number, total: number, current: string) => void,
+  onDone: (result: JiraExportResult) => void,
+) {
+  const token = getAccessToken()
+  const res = await fetch(
+    `${API_BASE_URL}/actions/meetings/${meetingId}/export/jira/stream?workspace_id=${workspaceId}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(body),
+    },
+  )
+  if (!res.ok || !res.body) throw new Error('SSE 연결 실패')
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    const chunk = decoder.decode(value)
+    for (const line of chunk.split('\n')) {
+      if (!line.startsWith('data: ')) continue
+      try {
+        const data = JSON.parse(line.slice(6))
+        if (data.done) {
+          onDone({ created: data.created ?? 0, updated: data.updated ?? 0, failed: data.failed ?? [] })
+          return
+        }
+        onProgress(data.done, data.total, data.current)
+      } catch { /* 무시 */ }
+    }
+  }
+  onDone({ created: 0, updated: 0, failed: [] })
+}
+
+export function syncJira(meetingId: string | number, workspaceId: number) {
+  return apiFetch<{
+    changed: { task_id: number; jira_key: string; field: string; old: string; new: string }[]
+    unchanged: number
+    synced_at: string
+  }>(
+    `/actions/meetings/${meetingId}/sync/jira?workspace_id=${workspaceId}`,
+  )
+}
+
 // ── 회의록 ────────────────────────────────────────────────────────────
 export interface MinutesResponse {
   meeting_id: number
