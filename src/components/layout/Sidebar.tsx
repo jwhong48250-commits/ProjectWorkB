@@ -18,8 +18,6 @@ import {
   UserRound,
   X,
   CalendarDays,
-  Search,
-  Video,
   ChevronDown,
   ChevronsLeft,
   ChevronsRight,
@@ -338,9 +336,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "회의",
     items: [
-      { to: "/meetings/new", label: "회의 생성 · 예약", icon: Plus, adminOnly: true, hideFromViewer: true, },
-      { to: "/meetings/context", label: "이전 회의 맥락", icon: Search },
-      { to: "/live/2", label: "실시간 회의", icon: Video },
+      { to: "/meetings/new", label: "회의 생성 · 예약", icon: Plus, adminOnly: true, hideFromViewer: true },
       { to: "/meetings/simulate-select", label: "WAV 시뮬레이션", icon: FlaskConical, adminOnly: true },
     ],
   },
