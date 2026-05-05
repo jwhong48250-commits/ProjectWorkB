@@ -5,8 +5,20 @@ import { login, signupMember } from '../../api/auth'
 import { setCurrentWorkspaceId } from '../../api/client'
 import { validateInviteCode } from '../../api/workspace'
 import { useAuth } from '../../context/AuthContext'
+import BirthDateSelect from '../../components/auth/BirthDateSelect'
 
 type SignupTab = 'admin' | 'member'
+type SignupGender = 'male' | 'female'
+type Gender = SignupGender | ''
+
+function calculateAge(birthDate: string): number {
+  const birth = new Date(`${birthDate}T00:00:00`)
+  const today = new Date()
+  let age = today.getFullYear() - birth.getFullYear()
+  const monthDiff = today.getMonth() - birth.getMonth()
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) age -= 1
+  return age
+}
 
 export default function SignupMemberPage() {
   const [searchParams] = useSearchParams()
@@ -16,6 +28,9 @@ export default function SignupMemberPage() {
   const [workspaceName, setWorkspaceName] = useState('')
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
+  const [birthDate, setBirthDate] = useState('')
+  const [phoneNumber, setPhoneNumber] = useState('')
+  const [gender, setGender] = useState<Gender>('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
@@ -58,8 +73,12 @@ export default function SignupMemberPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!inviteCode || !email || !name || !password || !confirmPassword) { setError('모든 필드를 입력해주세요.'); return }
+    const phoneDigits = phoneNumber.replace(/\D/g, '')
+    if (!inviteCode || !email || !name || !birthDate || !phoneNumber.trim() || !gender || !password || !confirmPassword) { setError('모든 필드를 입력해주세요.'); return }
     if (inviteCode.length < 6) { setError('초대코드를 확인해주세요.'); return }
+    const age = calculateAge(birthDate)
+    if (!Number.isFinite(age) || age < 0 || age > 120) { setError('생년월일을 다시 확인해주세요.'); return }
+    if (!/^[\d+\-\s()]+$/.test(phoneNumber.trim()) || phoneDigits.length < 9 || phoneDigits.length > 15) { setError('전화번호는 숫자 기준 9자 이상 15자 이하로 입력해주세요.'); return }
     if (password !== confirmPassword) { setError('비밀번호가 일치하지 않습니다.'); return }
 
     setLoading(true)
@@ -76,17 +95,24 @@ export default function SignupMemberPage() {
       setCurrentWorkspaceId(invite.workspace_id)
       const member = await signupMember({
         invite_code: normalizedCode,
-        email,
+        email: email.trim(),
         password,
-        name,
+        name: name.trim(),
+        birth_date: birthDate,
+        phone_number: phoneNumber.trim(),
+        gender: gender as SignupGender,
       })
-      await login({ email, password })
+      await login({ email: email.trim(), password })
       saveUser({
         id: member.id,
         email: member.email,
         name: member.name,
         role: member.role,
         workspace_id: invite.workspace_id,
+        birth_date: member.birth_date,
+        age: member.age,
+        phone_number: member.phone_number,
+        gender: member.gender,
       })
       navigate('/')
     } catch (err) {
@@ -97,7 +123,7 @@ export default function SignupMemberPage() {
   }
 
   return (
-    <div className="w-full max-w-sm">
+    <div className="w-full max-w-md">
       <h1 className="text-2xl font-bold text-foreground text-center mb-1">멤버 회원가입</h1>
       <p className="text-sm text-muted-foreground text-center mb-6">관리자에게 받은 초대코드로 가입하세요.</p>
 
@@ -174,6 +200,49 @@ export default function SignupMemberPage() {
             placeholder="홍길동"
             className="w-full h-10 px-3 rounded-lg border border-border bg-card text-sm outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
           />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-foreground mb-1">생년월일</label>
+          <BirthDateSelect value={birthDate} onChange={setBirthDate} />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-foreground mb-1">전화번호</label>
+          <input
+            type="tel"
+            value={phoneNumber}
+            onChange={(e) => setPhoneNumber(e.target.value)}
+            placeholder="010-1234-5678"
+            className="w-full h-10 px-3 rounded-lg border border-border bg-card text-sm outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-foreground mb-1">성별</label>
+          <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="성별">
+            {[
+              { value: 'female', label: '여성' },
+              { value: 'male', label: '남성' },
+            ].map((option) => (
+              <label
+                key={option.value}
+                className={clsx(
+                  'flex h-10 cursor-pointer items-center justify-center rounded-lg border text-sm font-medium transition-colors',
+                  gender === option.value
+                    ? 'border-accent bg-accent text-accent-foreground'
+                    : 'border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground',
+                )}
+              >
+                <input
+                  type="radio"
+                  name="gender"
+                  value={option.value}
+                  checked={gender === option.value}
+                  onChange={() => setGender(option.value as SignupGender)}
+                  className="sr-only"
+                />
+                {option.label}
+              </label>
+            ))}
+          </div>
         </div>
         <div>
           <label className="block text-sm font-medium text-foreground mb-1">비밀번호</label>

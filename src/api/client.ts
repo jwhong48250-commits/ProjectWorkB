@@ -9,6 +9,7 @@ interface TokenResponse {
 }
 
 export type UserRole = "admin" | "member" | "viewer";
+export type Gender = "male" | "female";
 
 export interface StoredUser {
   id: number;
@@ -16,6 +17,10 @@ export interface StoredUser {
   name: string;
   role: UserRole;
   workspace_id: number | null;
+  birth_date?: string | null;
+  age?: number | null;
+  phone_number?: string | null;
+  gender?: Gender | null;
 }
 
 interface ApiRequestOptions extends RequestInit {
@@ -89,6 +94,9 @@ function getFieldLabel(loc: unknown): string {
     new_password: "새 비밀번호",
     confirm_password: "비밀번호 확인",
     name: "이름",
+    birth_date: "생년월일",
+    phone_number: "전화번호",
+    gender: "성별",
     invite_code: "초대코드",
     token: "인증 토큰",
   };
@@ -264,6 +272,17 @@ function readWorkspaceIdClaim(value: unknown): number | null | undefined {
     : undefined;
 }
 
+function isGender(value: unknown): value is Gender {
+  return value === "male" || value === "female";
+}
+
+function readNumberClaim(value: unknown): number | null | undefined {
+  if (value === null) return null;
+
+  const number = Number(value);
+  return Number.isFinite(number) ? number : undefined;
+}
+
 export function syncStoredUserFromToken(
   fallback: Partial<StoredUser> = {}
 ): StoredUser | null {
@@ -277,6 +296,16 @@ export function syncStoredUserFromToken(
   const name = readStringClaim(payload?.name) ?? fallback.name;
   const workspaceId =
     readWorkspaceIdClaim(payload?.workspace_id) ?? fallback.workspace_id;
+  const birthDate =
+    payload?.birth_date === null
+      ? null
+      : readStringClaim(payload?.birth_date) ?? fallback.birth_date;
+  const age = readNumberClaim(payload?.age) ?? fallback.age;
+  const phoneNumber =
+    payload?.phone_number === null
+      ? null
+      : readStringClaim(payload?.phone_number) ?? fallback.phone_number;
+  const gender = isGender(payload?.gender) ? payload.gender : fallback.gender;
 
   if (!Number.isFinite(id) || !role) return getStoredUser();
 
@@ -288,6 +317,10 @@ export function syncStoredUserFromToken(
     role,
     workspace_id:
       workspaceId ?? previous?.workspace_id ?? getCurrentWorkspaceId(),
+    birth_date: birthDate ?? previous?.birth_date ?? null,
+    age: age ?? previous?.age ?? null,
+    phone_number: phoneNumber ?? previous?.phone_number ?? null,
+    gender: gender ?? previous?.gender ?? null,
   };
 
   setStoredUser(user);

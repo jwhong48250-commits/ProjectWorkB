@@ -4,7 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import AppShell from './components/layout/AppShell'
 import AuthLayout from './components/layout/AuthLayout'
 import FullscreenLayout from './components/layout/FullscreenLayout'
-import { PublicOnlyRoute, RequireAdminRoute, RequireAuthRoute } from './components/auth/AuthGuards'
+import { PublicOnlyRoute, RequireAuthRoute, RequireMeetingCreatorRoute, RequireWorkspaceAdminRoute } from './components/auth/AuthGuards'
 
 // Auth pages
 import LoginPage from './pages/auth/LoginPage'
@@ -100,8 +100,10 @@ export default function App() {
           {/* 고객지원 */}
           <Route path="support" element={<SupportPage />} />
 
-          {/* 회의: 생성 & 사전 */}
-          <Route path="meetings/new" element={<NewMeetingPage />} />
+          {/* 회의: 생성(뷰어 제외) & 사전 */}
+          <Route element={<RequireMeetingCreatorRoute />}>
+            <Route path="meetings/new" element={<NewMeetingPage />} />
+          </Route>
           <Route path="meetings/context" element={<MeetingContextPage />} />
 
           {/* 회의: 예정 */}
@@ -122,7 +124,7 @@ export default function App() {
           <Route path="settings" element={<Navigate to="/settings/my" replace />} />
           <Route path="settings/my" element={<MyPage />} />
           <Route path="settings/password" element={<PasswordSettingsPage />} />
-          <Route element={<RequireAdminRoute />}>
+          <Route element={<RequireWorkspaceAdminRoute />}>
             <Route path="settings/workspace" element={<WorkspaceSettingsPage />} />
             <Route path="settings/members" element={<MembersSettingsPage />} />
             <Route path="settings/departments" element={<DepartmentsSettingsPage />} />

@@ -21,6 +21,9 @@ export interface AdminSignupPayload {
   email: string
   password: string
   name: string
+  birth_date: string
+  phone_number: string
+  gender: Gender
 }
 
 export interface AdminSignupResponse {
@@ -31,6 +34,10 @@ export interface AdminSignupResponse {
   workspace_id: number
   invite_code: string
   welcome_email_sent?: boolean
+  birth_date: string | null
+  age: number | null
+  phone_number: string | null
+  gender: Gender | null
 }
 
 export interface MemberSignupPayload {
@@ -38,13 +45,22 @@ export interface MemberSignupPayload {
   email: string
   password: string
   name: string
+  birth_date: string
+  phone_number: string
+  gender: Gender
 }
+
+export type Gender = 'male' | 'female'
 
 export interface UserResponse {
   id: number
   email: string
   name: string
   role: 'admin' | 'member' | 'viewer'
+  birth_date: string | null
+  age: number | null
+  phone_number: string | null
+  gender: Gender | null
 }
 
 export interface UserProfileResponse extends UserResponse {

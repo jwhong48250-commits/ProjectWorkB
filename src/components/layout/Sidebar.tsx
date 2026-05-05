@@ -3,7 +3,6 @@ import { NavLink, Link, useNavigate } from "react-router-dom";
 import {
   Home,
   History,
-  Video,
   Plus,
   Mic,
   Users,
@@ -13,13 +12,14 @@ import {
   PanelLeftOpen,
   FileText,
   ListTodo,
-  Search,
   Link2,
   Gauge,
   Building2,
   UserRound,
   X,
   CalendarDays,
+  Search,
+  Video,
   ChevronDown,
   ChevronsLeft,
   ChevronsRight,
@@ -317,6 +317,8 @@ interface NavItemDef {
   icon: LucideIcon;
   badge?: number;
   adminOnly?: boolean;
+  /** 워크스페이스 뷰어에게 숨김 (회의 생성 등) */
+  hideFromViewer?: boolean;
 }
 
 interface NavGroup {
@@ -336,7 +338,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "회의",
     items: [
-      { to: "/meetings/new", label: "회의 생성 · 예약", icon: Plus, adminOnly: true },
+      { to: "/meetings/new", label: "회의 생성 · 예약", icon: Plus, adminOnly: true, hideFromViewer: true, },
       { to: "/meetings/context", label: "이전 회의 맥락", icon: Search },
       { to: "/live/2", label: "실시간 회의", icon: Video },
       { to: "/meetings/simulate-select", label: "WAV 시뮬레이션", icon: FlaskConical, adminOnly: true },
@@ -526,9 +528,12 @@ export default function Sidebar({
           aria-label="주 내비게이션"
         >
           {NAV_GROUPS.map((group, groupIdx) => {
-            const items = group.items.filter(
-              (item) => isWorkspaceAdmin || !item.adminOnly
-            );
+            const items = group.items.filter((item) => {
+              if (item.adminOnly && !isWorkspaceAdmin) return false;
+              if (item.hideFromViewer && workspaceRole === "viewer")
+                return false;
+              return true;
+            });
             if (items.length === 0) return null;
 
             return (

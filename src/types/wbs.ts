@@ -9,15 +9,18 @@ export interface WbsTask {
   assigneeId?: string
   assigneeName?: string
   priority: WbsPriority
+  urgency?: string
   status: WbsStatus
   dueDate?: string
-  progress: number // 0-100
-  jiraKey?: string
+  progress: number
+  orderIndex: number
+  jiraIssueId?: string
 }
 
 export interface WbsEpic {
   id: string
   title: string
+  orderIndex: number
   tasks: WbsTask[]
   progress: number
 }

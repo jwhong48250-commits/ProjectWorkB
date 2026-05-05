@@ -13,11 +13,15 @@ import {
   getJiraProjects,
   saveJiraProject,
   getJiraStatuses,
+  resetJiraLinks,
   saveJiraMapping,
+  getJiraSites,
+  selectJiraSite,
   type IntegrationItem,
   type ServiceName,
   type OAuthService,
   type JiraProject,
+  type JiraSite,
   type SlackChannel,
   type GoogleCalendarItem,
 } from '../../api/integrations'
@@ -49,11 +53,14 @@ export default function IntegrationsSettingsPage() {
   const [googleCalendarName, setGoogleCalendarName] = useState('')
   const [slackChannels, setSlackChannels] = useState<SlackChannel[]>([])
   const [channelLoading, setChannelLoading] = useState(false)
-  // JIRA 프로젝트 + 상태 매핑 모달
-  const [jiraStep, setJiraStep] = useState<'project' | 'mapping' | null>(null)
+  // JIRA 사이트 선택 + 프로젝트 + 상태 매핑 모달
+  const [jiraStep, setJiraStep] = useState<'site' | 'project' | 'mapping' | null>(null)
+  const [jiraSites, setJiraSites] = useState<JiraSite[]>([])
+  const [jiraSiteLoading, setJiraSiteLoading] = useState(false)
   const [jiraProjects, setJiraProjects] = useState<JiraProject[]>([])
   const [jiraProjectLoading, setJiraProjectLoading] = useState(false)
   const [jiraSelectedProject, setJiraSelectedProject] = useState('')
+  const [jiraProjectSearch, setJiraProjectSearch] = useState('')
   const [jiraStatuses, setJiraStatuses] = useState<string[]>([])
   const [jiraMapping, setJiraMapping] = useState<Record<string, string>>({})
   const workspaceId = getCurrentWorkspaceId()
@@ -105,6 +112,10 @@ export default function IntegrationsSettingsPage() {
       if (service === 'jira') {
         void openJiraProjectPicker()
       }
+    } else if (status === 'select_site' && service === 'jira') {
+      // 멀티 사이트 — 사이트 선택 모달 먼저
+      window.history.replaceState({}, '', '/settings/integrations')
+      void openJiraSitePicker()
     } else if (status === 'error') {
       setError('연동 중 오류가 발생했습니다. 다시 시도해주세요.')
       window.history.replaceState({}, '', '/settings/integrations')
@@ -126,10 +137,37 @@ export default function IntegrationsSettingsPage() {
     }
   }
 
+  async function openJiraSitePicker() {
+    setJiraStep('site')
+    setJiraSiteLoading(true)
+    try {
+      const res = await getJiraSites(workspaceId)
+      setJiraSites(res.sites)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'JIRA 사이트 목록을 불러오지 못했습니다.')
+      setJiraStep(null)
+    } finally {
+      setJiraSiteLoading(false)
+    }
+  }
+
+  async function handleJiraSiteSelect(cloudId: string, siteUrl: string) {
+    try {
+      await selectJiraSite(workspaceId, cloudId, siteUrl)
+      setJiraStep(null)
+      await refreshList()
+      // 사이트 선택 완료 → 바로 프로젝트 선택으로 이동
+      void openJiraProjectPicker()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '사이트 선택에 실패했습니다.')
+    }
+  }
+
   async function openJiraProjectPicker() {
     setJiraStep('project')
     setJiraProjectLoading(true)
     setJiraSelectedProject('')
+    setJiraProjectSearch('')
     try {
       const res = await getJiraProjects(workspaceId)
       setJiraProjects(res.projects)
@@ -142,10 +180,15 @@ export default function IntegrationsSettingsPage() {
   }
 
   async function handleJiraProjectSelect(projectKey: string) {
+    const currentProjectKey = integrations.find((i) => i.service === 'jira')?.selected_project_key
+    if (currentProjectKey && currentProjectKey !== projectKey) {
+      if (!confirm(
+        `프로젝트를 "${currentProjectKey}"에서 "${projectKey}"로 변경합니다.\n기존 JIRA 연동 ID가 초기화됩니다.\n계속하시겠습니까?`
+      )) return
+    }
     try {
       await saveJiraProject(workspaceId, projectKey)
       setJiraSelectedProject(projectKey)
-      // 상태 매핑 단계로 이동
       setJiraProjectLoading(true)
       const res = await getJiraStatuses(workspaceId)
       const defaultMapping: Record<string, string> = {}
@@ -174,6 +217,22 @@ export default function IntegrationsSettingsPage() {
       await refreshList()
     } catch (err) {
       setError(err instanceof Error ? err.message : '상태 매핑 저장에 실패했습니다.')
+    }
+  }
+
+  async function handleJiraResetLinks() {
+    if (!confirm(
+      'WBS의 모든 JIRA 연동 ID를 초기화합니다.\n' +
+      '다른 JIRA 프로젝트로 전환할 때 사용하세요.\n\n' +
+      '초기화 후 다시 내보내기를 실행하면 새 JIRA 이슈가 생성됩니다.\n' +
+      '계속하시겠습니까?'
+    )) return
+    try {
+      await resetJiraLinks(workspaceId)
+      setSuccessMessage('JIRA 연동 ID가 초기화되었습니다.')
+      setTimeout(() => setSuccessMessage(null), 4000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '초기화에 실패했습니다.')
     }
   }
 
@@ -221,35 +280,85 @@ export default function IntegrationsSettingsPage() {
             selectedCalendarName={item.service === 'google_calendar' ? item.selected_calendar_name : undefined}
             onCalendarChange={openGoogleCalendarPicker}
             onJiraSetup={item.service === 'jira' && item.is_connected ? openJiraProjectPicker : undefined}
+            onJiraResetLinks={item.service === 'jira' && item.is_connected ? handleJiraResetLinks : undefined}
           />
         ))}
       </div>
+
+      {/* JIRA 사이트 선택 모달 (멀티 사이트) */}
+      {jiraStep === 'site' && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-card rounded-xl border border-border p-6 w-full max-w-md mx-4">
+            <h2 className="text-base font-semibold text-foreground mb-1">Atlassian 사이트 선택</h2>
+            <p className="text-mini text-muted-foreground mb-4">
+              연결할 Atlassian 사이트를 선택하세요. 사이트마다 별도 프로젝트가 있습니다.
+            </p>
+            {jiraSiteLoading ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">불러오는 중...</p>
+            ) : jiraSites.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">접근 가능한 사이트가 없습니다.</p>
+            ) : (
+              <div className="max-h-64 overflow-y-auto rounded-lg border border-border divide-y divide-border mb-4">
+                {jiraSites.map((site) => (
+                  <button
+                    key={site.id}
+                    onClick={() => handleJiraSiteSelect(site.id, site.url)}
+                    className="w-full px-3 py-2.5 text-left hover:bg-muted/40 transition-colors"
+                  >
+                    <p className="text-sm font-medium text-foreground">{site.name}</p>
+                    <p className="text-micro text-muted-foreground">{site.url}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex justify-end">
+              <button
+                onClick={() => setJiraStep(null)}
+                className="h-8 px-3 rounded-lg border border-border text-sm hover:bg-muted/50 transition-colors"
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* JIRA 프로젝트 선택 모달 */}
       {jiraStep === 'project' && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-card rounded-xl border border-border p-6 w-full max-w-md mx-4">
             <h2 className="text-base font-semibold text-foreground mb-1">JIRA 프로젝트 선택</h2>
-            <p className="text-mini text-muted-foreground mb-4">WBS와 연동할 JIRA 프로젝트를 선택하세요.</p>
+            <p className="text-mini text-muted-foreground mb-3">WBS와 연동할 JIRA 프로젝트를 선택하세요.</p>
+            <input
+              value={jiraProjectSearch}
+              onChange={(e) => setJiraProjectSearch(e.target.value)}
+              placeholder="프로젝트 이름 또는 키 검색"
+              className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm mb-3 focus:outline-none focus:ring-1 focus:ring-accent"
+            />
             {jiraProjectLoading ? (
               <p className="text-sm text-muted-foreground py-4 text-center">불러오는 중...</p>
             ) : jiraProjects.length === 0 ? (
               <p className="text-sm text-muted-foreground py-4 text-center">접근 가능한 프로젝트가 없습니다.</p>
             ) : (
               <div className="max-h-64 overflow-y-auto rounded-lg border border-border divide-y divide-border mb-4">
-                {jiraProjects.map((p) => (
-                  <button
-                    key={p.key}
-                    onClick={() => handleJiraProjectSelect(p.key)}
-                    className="w-full px-3 py-2.5 text-left hover:bg-muted/40 transition-colors flex items-center justify-between"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-foreground">{p.name}</p>
-                      <p className="text-micro text-muted-foreground">{p.key}</p>
-                    </div>
-                    <Check size={14} className="text-accent opacity-0 group-hover:opacity-100" />
-                  </button>
-                ))}
+                {jiraProjects
+                  .filter((p) => {
+                    const q = jiraProjectSearch.toLowerCase()
+                    return !q || p.name.toLowerCase().includes(q) || p.key.toLowerCase().includes(q)
+                  })
+                  .map((p) => (
+                    <button
+                      key={p.key}
+                      onClick={() => handleJiraProjectSelect(p.key)}
+                      className="w-full px-3 py-2.5 text-left hover:bg-muted/40 transition-colors flex items-center justify-between"
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-foreground">{p.name}</p>
+                        <p className="text-micro text-muted-foreground">{p.key}</p>
+                      </div>
+                      <Check size={14} className="text-accent opacity-0 group-hover:opacity-100" />
+                    </button>
+                  ))}
               </div>
             )}
             <div className="flex justify-end">
@@ -408,6 +517,7 @@ function IntegrationCard({
   selectedCalendarName,
   onCalendarChange,
   onJiraSetup,
+  onJiraResetLinks,
 }: {
   item: IntegrationItem
   onConnect: () => void
@@ -420,6 +530,7 @@ function IntegrationCard({
   selectedCalendarName?: string
   onCalendarChange?: () => void
   onJiraSetup?: () => void
+  onJiraResetLinks?: () => void
 }) {
   const meta = SERVICE_META[item.service]
   const isConnected = item.is_connected
@@ -463,12 +574,21 @@ function IntegrationCard({
         <div className="mb-3 pt-3 border-t border-border">
           <div className="flex items-center justify-between">
             <p className="text-mini text-muted-foreground">프로젝트 및 상태 매핑</p>
-            <button
-              onClick={onJiraSetup}
-              className="text-mini text-accent hover:underline transition-colors"
-            >
-              설정 변경
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onJiraSetup}
+                className="text-mini text-accent hover:underline transition-colors"
+              >
+                설정 변경
+              </button>
+              <span className="text-muted-foreground text-mini">·</span>
+              <button
+                onClick={onJiraResetLinks}
+                className="text-mini text-muted-foreground hover:text-red-500 transition-colors"
+              >
+                연동 ID 초기화
+              </button>
+            </div>
           </div>
         </div>
       )}
