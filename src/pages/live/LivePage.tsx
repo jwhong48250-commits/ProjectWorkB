@@ -17,13 +17,21 @@ import {
 
 import clsx from "clsx";
 import { MEETINGS } from "../../data/mockData";
-import { endWorkspaceMeeting } from "../../api/meetings";
+import {
+  endWorkspaceMeeting,
+  fetchWorkspaceMeetingDetail,
+} from "../../api/meetings";
 import { getCurrentWorkspaceId } from "../../utils/workspace";
 import {
   getMicEnabled,
   getSelectedCameraId,
   getSelectedMicId,
 } from "../../utils/deviceSettings";
+import {
+  persistMeetingSnapshot,
+  readMeetingSnapshotForRoute,
+} from "../../utils/meetingRoutes";
+import type { Meeting } from "../../types/meeting";
 import { generateQuickReport } from "../../api/chatbot";
 import { useLiveSTT } from "../../hooks/useLiveSTT";
 import LiveScreenPage from "../../pages/live/LiveScreenPage";
@@ -74,7 +82,12 @@ const AUTO_SCROLL_THRESHOLD_PX = 64;
 export default function LivePage() {
   const { meetingId = "2" } = useParams();
   const navigate = useNavigate();
-  const meeting = MEETINGS.find((m) => m.id === meetingId) ?? MEETINGS[0];
+  const fallbackMeeting =
+    MEETINGS.find((m) => m.id === meetingId) ?? MEETINGS[0];
+  const [meeting, setMeeting] = useState<Meeting>(
+    () => readMeetingSnapshotForRoute(meetingId) ?? fallbackMeeting,
+  );
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const [initialMicSettings] = useState(() => ({
     selectedMicId: getSelectedMicId(),
     micEnabled: getMicEnabled(true),
@@ -105,10 +118,12 @@ export default function LivePage() {
 
   // Aux panel (search / screen / speakers) — null = closed
   const [auxPanel, setAuxPanel] = useState<AuxPanel>(null);
+  const [isEndingMeeting, setIsEndingMeeting] = useState(false);
 
   const decisions: PanelItem[] = [];
   const actions: PanelItem[] = [];
   const displaySegments = diarization;
+  const showEndingModal = isEndingMeeting && wsStatus !== "error";
 
   // 자동 스크롤
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -137,16 +152,77 @@ export default function LivePage() {
     }
   }, [wsStatus, meetingId, navigate]);
 
+  useEffect(() => {
+    if (wsStatus === "error") {
+      setIsEndingMeeting(false);
+    }
+  }, [wsStatus]);
+
+  useEffect(() => {
+    const snapshot = readMeetingSnapshotForRoute(meetingId);
+    setMeeting(snapshot ?? fallbackMeeting);
+
+    const numericMeetingId = Number(meetingId);
+    if (!Number.isFinite(numericMeetingId) || numericMeetingId <= 0) {
+      return;
+    }
+
+    let cancelled = false;
+
+    fetchWorkspaceMeetingDetail(getCurrentWorkspaceId(), numericMeetingId)
+      .then((loadedMeeting) => {
+        if (cancelled) return;
+        setMeeting(loadedMeeting);
+        persistMeetingSnapshot(loadedMeeting);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setMeeting(snapshot ?? fallbackMeeting);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [meetingId, fallbackMeeting]);
+
+  useEffect(() => {
+    if (!meeting.startAt) {
+      setNowMs(Date.now());
+      return;
+    }
+
+    setNowMs(Date.now());
+    const intervalId = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [meeting.startAt]);
+
   const elapsedSec = meeting.startAt
     ? Math.max(
         0,
-        Math.floor((Date.now() - new Date(meeting.startAt).getTime()) / 1000),
+        Math.floor((nowMs - new Date(meeting.startAt).getTime()) / 1000),
       )
     : 0;
   const elapsed = `${String(Math.floor(elapsedSec / 60)).padStart(2, "0")}:${String(elapsedSec % 60).padStart(2, "0")}`;
 
   function toggleAux(panel: Exclude<AuxPanel, null>) {
     setAuxPanel((prev) => (prev === panel ? null : panel));
+  }
+
+  function handleEndMeeting() {
+    if (isEndingMeeting || wsStatus === "finalizing") {
+      return;
+    }
+
+    const workspaceId = getCurrentWorkspaceId();
+    setIsEndingMeeting(true);
+    void endWorkspaceMeeting(workspaceId, Number(meetingId));
+    void generateQuickReport(workspaceId, Number(meetingId));
+    stopMeeting();
   }
 
   useEffect(() => {
@@ -435,26 +511,16 @@ export default function LivePage() {
               </button>
             ) : (
               <button
-                onClick={() => {
-                  endWorkspaceMeeting(
-                    getCurrentWorkspaceId(),
-                    Number(meetingId),
-                  );
-                  void generateQuickReport(
-                    getCurrentWorkspaceId(),
-                    Number(meetingId),
-                  );
-                  stopMeeting();
-                }}
-                disabled={wsStatus === "finalizing"}
+                onClick={handleEndMeeting}
+                disabled={wsStatus === "finalizing" || showEndingModal}
                 className={clsx(
                   "flex items-center gap-1.5 h-8 px-3 rounded-lg text-white text-mini font-medium transition-colors",
-                  wsStatus === "finalizing"
+                  wsStatus === "finalizing" || showEndingModal
                     ? "bg-yellow-500 opacity-75 cursor-not-allowed"
                     : "bg-red-500 hover:bg-red-600",
                 )}
               >
-                {wsStatus === "finalizing" ? (
+                {wsStatus === "finalizing" || showEndingModal ? (
                   <>
                     <span className="w-3 h-3 rounded-full border-2 border-white border-t-transparent animate-spin" />
                     처리 중
@@ -730,6 +796,43 @@ export default function LivePage() {
           {renderMainPanelContent()}
         </div>
       </aside>
+
+      {showEndingModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="meeting-ending-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-sm px-4"
+        >
+          <div className="w-full max-w-sm rounded-2xl border border-border bg-popover shadow-xl overflow-hidden">
+            <div className="flex items-center gap-2 px-5 py-4 border-b border-border">
+              {wsStatus === "done" ? (
+                <CheckCircle size={16} className="text-green-500 shrink-0" />
+              ) : (
+                <span className="w-4 h-4 rounded-full border-2 border-accent border-t-transparent animate-spin shrink-0" />
+              )}
+              <h2
+                id="meeting-ending-title"
+                className="text-sm font-semibold text-foreground"
+              >
+                {wsStatus === "done"
+                  ? "회의록 화면으로 이동 중입니다"
+                  : "회의 종료를 처리하고 있습니다"}
+              </h2>
+            </div>
+            <div className="px-5 py-4">
+              <p className="text-sm text-foreground leading-6">
+                다음 화면으로 넘어갈 때까지 잠시만 기다려주세요.
+              </p>
+              <p className="mt-2 text-mini text-muted-foreground leading-5">
+                {wsStatus === "done"
+                  ? "최종 회의록 화면으로 자동 이동하고 있습니다."
+                  : "회의 종료 신호를 전송하고 후처리를 준비하고 있습니다."}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
