@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams, useLocation } from 'react-rout
 import {
   Sparkles, FileText, Share2, Loader2,
   X, ArrowLeft,
-  RefreshCw, Lock, ExternalLink, ChevronRight, Download, Pencil, ChevronDown,
+  RefreshCw, Lock, ExternalLink, ChevronRight, Download, Pencil, Check,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { getCurrentWorkspaceId } from '../../api/client'
