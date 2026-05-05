@@ -115,6 +115,17 @@ export interface JiraSelectiveBody {
   task_ids?: number[]
 }
 
+export function jiraNotify(
+  meetingId: string | number,
+  workspaceId: number,
+  body: { services: string[]; created: number; updated: number },
+) {
+  return apiFetch<BatchExportResponse>(
+    `/actions/meetings/${meetingId}/export/jira-notify?workspace_id=${workspaceId}`,
+    { method: 'POST', body: JSON.stringify(body) },
+  )
+}
+
 export function exportJira(meetingId: string | number, workspaceId: number) {
   return apiFetch<{ status: string }>(
     `/actions/meetings/${meetingId}/export/jira?workspace_id=${workspaceId}`,
@@ -180,7 +191,7 @@ export async function streamJiraExport(
       if (!line.startsWith('data: ')) continue
       try {
         const data = JSON.parse(line.slice(6))
-        if (data.done) {
+        if (data.done === true) {
           onDone({ created: data.created ?? 0, updated: data.updated ?? 0, failed: data.failed ?? [] })
           return
         }
@@ -191,6 +202,13 @@ export async function streamJiraExport(
   onDone({ created: 0, updated: 0, failed: [] })
 }
 
+export function shareWbsProgress(meetingId: string | number, workspaceId: number) {
+  return apiFetch<{ status: string }>(
+    `/actions/meetings/${meetingId}/share/wbs-progress?workspace_id=${workspaceId}`,
+    { method: 'POST' },
+  )
+}
+
 export function syncJira(meetingId: string | number, workspaceId: number) {
   return apiFetch<{
     changed: { task_id: number; jira_key: string; field: string; old: string; new: string }[]
@@ -198,6 +216,36 @@ export function syncJira(meetingId: string | number, workspaceId: number) {
     synced_at: string
   }>(
     `/actions/meetings/${meetingId}/sync/jira?workspace_id=${workspaceId}`,
+  )
+}
+
+// ── 배치 내보내기 ──────────────────────────────────────────────────
+export interface BatchExportServiceResult {
+  status: 'ok' | 'error'
+  message: string
+  error_code?: 'token_expired' | 'not_connected' | 'unknown'
+}
+
+export interface BatchExportResponse {
+  overall_status: 'success' | 'partial_success' | 'failed'
+  results: Record<string, BatchExportServiceResult>
+}
+
+export interface BatchExportRequest {
+  services: string[]
+  slack_channel_id?: string
+  include_action_items?: boolean
+  include_reports?: boolean
+}
+
+export function exportBatch(
+  meetingId: string | number,
+  workspaceId: number,
+  body: BatchExportRequest,
+) {
+  return apiFetch<BatchExportResponse>(
+    `/actions/meetings/${meetingId}/export/batch?workspace_id=${workspaceId}`,
+    { method: 'POST', body: JSON.stringify(body) },
   )
 }
 

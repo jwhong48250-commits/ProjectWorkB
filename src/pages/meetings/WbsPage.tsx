@@ -1,5 +1,5 @@
-import { useState, useEffect, Fragment } from 'react'
-import { useParams, useLocation } from 'react-router-dom'
+import { useState, useEffect, useRef, Fragment } from 'react'
+import { useParams, useLocation, useNavigate } from 'react-router-dom'
 import {
   Plus, ExternalLink, ChevronDown, ChevronRight,
   Sparkles, Loader2, Trash2, CheckCircle2, Clock3,
@@ -15,10 +15,14 @@ import {
   type WbsEpicApi,
 } from '../../api/wbs'
 import {
-  syncJira,
-  previewJira, streamJiraExport,
+  syncJira, shareWbsProgress,
+  previewJira, streamJiraExport, jiraNotify,
+  exportSlack, exportGoogleCalendar,
+  suggestNextMeeting,
   type JiraPreviewResult, type JiraPreviewEpic, type JiraExportResult, type JiraSelectiveBody,
+  type TimeSlot,
 } from '../../api/actions'
+import { getIntegrations, type IntegrationItem } from '../../api/integrations'
 import type { WbsEpic, WbsTask, WbsStatus, WbsPriority } from '../../types/wbs'
 
 // ─── 상수 ────────────────────────────────────────────────────────────────────
@@ -203,14 +207,30 @@ function GanttView({ epics }: { epics: WbsEpic[] }) {
 
 // ─── 프리뷰 모달 ──────────────────────────────────────────────────────────────
 
+const EXTRA_SERVICE_META: Record<string, { label: string; icon: string }> = {
+  slack:            { label: 'Slack 알림 전송 (JIRA 링크 포함)', icon: '💬' },
+  google_calendar:  { label: 'Google Calendar 업데이트',         icon: '📅' },
+}
+
 function PreviewModal({
-  data, onClose, onConfirm, loading,
+  data, onClose, onConfirm, loading, connectedServices = [],
 }: {
   data: JiraPreviewResult
   onClose: () => void
-  onConfirm: () => void
+  onConfirm: (extraServices: string[]) => void
   loading: boolean
+  connectedServices?: string[]
 }) {
+  const [extraServices, setExtraServices] = useState<Set<string>>(new Set())
+
+  function toggleService(svc: string) {
+    setExtraServices(prev => {
+      const next = new Set(prev)
+      next.has(svc) ? next.delete(svc) : next.add(svc)
+      return next
+    })
+  }
+
   const totalCreate = data.epic_create + data.task_create
   const totalUpdate = data.epic_update + data.task_update
 
@@ -288,16 +308,42 @@ function PreviewModal({
           ))}
         </div>
 
+        {/* 추가 서비스 체크박스 */}
+        {connectedServices.length > 0 && (
+          <div className="px-6 py-3 border-t border-border bg-muted/20">
+            <p className="text-micro font-semibold text-muted-foreground mb-2">JIRA 완료 후 함께 실행</p>
+            <div className="flex flex-col gap-1.5">
+              {connectedServices.map(svc => {
+                const meta = EXTRA_SERVICE_META[svc]
+                if (!meta) return null
+                return (
+                  <label key={svc} className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={extraServices.has(svc)}
+                      onChange={() => toggleService(svc)}
+                      className="w-3.5 h-3.5 accent-accent"
+                    />
+                    <span className="text-mini text-foreground">
+                      {meta.icon} {meta.label}
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {/* 푸터 */}
         <div className="px-6 py-4 border-t border-border flex justify-end gap-2">
           <button onClick={onClose} disabled={loading}
             className="h-8 px-4 rounded-lg border border-border text-sm text-muted-foreground hover:bg-muted/50 disabled:opacity-50">
             취소
           </button>
-          <button onClick={onConfirm} disabled={loading}
+          <button onClick={() => onConfirm([...extraServices])} disabled={loading}
             className="h-8 px-4 rounded-lg bg-accent text-accent-foreground text-sm font-medium hover:bg-accent/90 disabled:opacity-50 flex items-center gap-1.5">
             {loading && <Loader2 size={12} className="animate-spin" />}
-            JIRA로 내보내기
+            {extraServices.size > 0 ? `JIRA + ${extraServices.size}개 서비스 내보내기` : 'JIRA로 내보내기'}
           </button>
         </div>
       </div>
@@ -324,6 +370,221 @@ function ProgressOverlay({ done, total, current }: { done: number; total: number
           <div className="h-full bg-accent rounded-full transition-all duration-300" style={{ width: `${pct}%` }} />
         </div>
         <p className="text-mini text-center text-muted-foreground">{pct}% 완료</p>
+      </div>
+    </div>
+  )
+}
+
+// ─── 다음 회의 예약 모달 ──────────────────────────────────────────────────────
+
+const DURATION_OPTIONS = [30, 60, 90, 120]
+
+function formatSlotDisplay(slot: TimeSlot) {
+  const start = new Date(slot.start)
+  const end   = new Date(slot.end)
+  const date  = start.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })
+  const from  = start.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
+  const to    = end.toLocaleTimeString('ko-KR',   { hour: '2-digit', minute: '2-digit', hour12: false })
+  const dur   = Math.round((end.getTime() - start.getTime()) / 60000)
+  return { date, range: `${from} ~ ${to}`, dur }
+}
+
+function NextMeetingModal({
+  meetingId, workspaceId, onClose,
+}: {
+  meetingId: string
+  workspaceId: number
+  onClose: () => void
+}) {
+  const navigate = useNavigate()
+  const [step, setStep]               = useState<'setup' | 'slots'>('setup')
+  const [duration, setDuration]       = useState(60)
+  const [loading, setLoading]         = useState(false)
+  const [error, setError]             = useState<string | null>(null)
+  const [slots, setSlots]             = useState<TimeSlot[]>([])
+  const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
+  const [title, setTitle]             = useState('')
+
+  async function handleSuggest() {
+    setError(null)
+    setLoading(true)
+    try {
+      const res = await suggestNextMeeting(meetingId, workspaceId, { duration_minutes: duration })
+      if (!res.slots || res.slots.length === 0) {
+        setError('추천 가능한 빈 시간이 없습니다. 참석자 캘린더를 확인해주세요.')
+        return
+      }
+      setSlots(res.slots)
+      setSelectedSlot(res.slots[0])
+      setStep('slots')
+    } catch {
+      setError('일정 조회에 실패했습니다. Slack · Google Calendar 연동 상태를 확인해주세요.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function handleNavigate() {
+    if (!selectedSlot || !title.trim()) return
+    navigate('/meetings/new', {
+      state: {
+        draftMeeting: {
+          id: '',
+          title: title.trim(),
+          startAt: selectedSlot.start,
+          status: 'upcoming',
+          participants: [],
+          actionItemCount: 0,
+          decisionCount: 0,
+          tags: [],
+        },
+      },
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-card rounded-xl border border-border shadow-2xl w-full max-w-sm mx-4 overflow-hidden">
+
+        {/* 헤더 */}
+        <div className="flex items-start justify-between px-6 py-4 border-b border-border">
+          <div>
+            <h2 className="text-base font-semibold text-foreground">다음 회의 예약</h2>
+            <p className="text-mini text-muted-foreground mt-0.5">
+              {step === 'setup'
+                ? 'AI가 참석자 빈 시간을 분석해 추천합니다'
+                : '일정을 선택하고 회의 제목을 입력하세요'}
+            </p>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors mt-0.5">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* 본문 */}
+        <div className="px-6 py-5 space-y-4">
+          {step === 'setup' ? (
+            <>
+              <div>
+                <p className="text-sm font-medium text-foreground mb-2">예상 소요 시간</p>
+                <div className="grid grid-cols-4 gap-2">
+                  {DURATION_OPTIONS.map(min => (
+                    <button
+                      key={min}
+                      onClick={() => setDuration(min)}
+                      className={clsx(
+                        'py-2 rounded-lg border text-sm transition-colors',
+                        duration === min
+                          ? 'border-accent bg-accent/10 text-accent font-medium'
+                          : 'border-border text-muted-foreground hover:bg-muted/50',
+                      )}
+                    >
+                      {min}분
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-muted/30 text-mini text-muted-foreground">
+                <span className="shrink-0 mt-0.5">💡</span>
+                <span>Slack 채널 멤버 이메일 기준으로 Google Calendar 빈 시간을 조회합니다. 두 서비스 모두 연결되어 있어야 합니다.</span>
+              </div>
+
+              {error && (
+                <p className="text-mini text-red-500 bg-red-50 dark:bg-red-900/20 rounded-lg px-3 py-2">{error}</p>
+              )}
+            </>
+          ) : (
+            <>
+              {/* 슬롯 선택 */}
+              <div>
+                <p className="text-sm font-medium text-foreground mb-2">추천 일정 선택</p>
+                <div className="space-y-2">
+                  {slots.map((slot, i) => {
+                    const { date, range, dur } = formatSlotDisplay(slot)
+                    const isSelected = selectedSlot === slot
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => setSelectedSlot(slot)}
+                        className={clsx(
+                          'w-full flex items-center gap-3 px-4 py-3 rounded-lg border text-left transition-all',
+                          isSelected
+                            ? 'border-accent bg-accent/10 ring-1 ring-accent/30'
+                            : 'border-border hover:bg-muted/30',
+                        )}
+                      >
+                        <div className={clsx(
+                          'w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0',
+                          isSelected ? 'border-accent bg-accent' : 'border-muted-foreground/30',
+                        )}>
+                          {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground">{date}</p>
+                          <p className="text-mini text-muted-foreground">{range} · {dur}분</p>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* 회의 제목 */}
+              <div>
+                <p className="text-sm font-medium text-foreground mb-1.5">다음 회의 제목 <span className="text-red-500">*</span></p>
+                <input
+                  autoFocus
+                  type="text"
+                  value={title}
+                  onChange={e => setTitle(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleNavigate()}
+                  placeholder="예: Q2 2주차 스프린트 회의"
+                  className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+                />
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* 푸터 */}
+        <div className="px-6 py-4 border-t border-border flex items-center gap-2">
+          {step === 'slots' && (
+            <button
+              onClick={() => { setStep('setup'); setError(null) }}
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors mr-auto"
+            >
+              ← 다시
+            </button>
+          )}
+          <div className={clsx('flex gap-2', step === 'setup' && 'ml-auto')}>
+            <button
+              onClick={onClose}
+              className="h-8 px-4 rounded-lg border border-border text-sm text-muted-foreground hover:bg-muted/50 transition-colors"
+            >
+              취소
+            </button>
+            {step === 'setup' ? (
+              <button
+                onClick={handleSuggest}
+                disabled={loading}
+                className="h-8 px-4 rounded-lg bg-accent text-accent-foreground text-sm font-medium hover:bg-accent/90 disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {loading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                {loading ? '조회 중...' : 'AI 일정 추천'}
+              </button>
+            ) : (
+              <button
+                onClick={handleNavigate}
+                disabled={!selectedSlot || !title.trim()}
+                className="h-8 px-4 rounded-lg bg-accent text-accent-foreground text-sm font-medium hover:bg-accent/90 disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <ExternalLink size={12} />
+                회의 생성 페이지로
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -393,15 +654,28 @@ export default function WbsPage() {
   const [selectedTasks, setSelectedTasks]   = useState<Set<string>>(new Set())
 
   // ── JIRA
-  const [jiraSyncing, setJiraSyncing]   = useState(false)
+  const [jiraSyncing, setJiraSyncing]       = useState(false)
+  const [progressSharing, setProgressSharing] = useState(false)
   const [highlighted, setHighlighted]   = useState<Set<string>>(new Set())
   const [lastSyncAt, setLastSyncAt]     = useState<string | null>(
     () => localStorage.getItem(`jira_sync_${meetingId}`)
   )
 
+  // ── 연동 상태
+  const [integrations, setIntegrations] = useState<IntegrationItem[]>([])
+
+  // ── 내보내기 드롭다운
+  const [exportMenuOpen, setExportMenuOpen]   = useState(false)
+  const [slackExporting, setSlackExporting]   = useState(false)
+  const [calendarExporting, setCalendarExporting] = useState(false)
+  const exportMenuRef = useRef<HTMLDivElement>(null)
+
+  // ── 다음 회의 예약 모달
+  const [nextMeetingOpen, setNextMeetingOpen] = useState(false)
+
   // ── 프리뷰 모달
-  const [previewData, setPreviewData]     = useState<JiraPreviewResult | null>(null)
-  const [previewBody, setPreviewBody]     = useState<JiraSelectiveBody>({})
+  const [previewData, setPreviewData]       = useState<JiraPreviewResult | null>(null)
+  const [previewBody, setPreviewBody]       = useState<JiraSelectiveBody>({})
   const [previewLoading, setPreviewLoading] = useState(false)
 
   // ── SSE 진행률
@@ -425,6 +699,23 @@ export default function WbsPage() {
       .catch(() => setEpics([]))
       .finally(() => setLoading(false))
   }, [meetingId])
+
+  useEffect(() => {
+    getIntegrations(workspaceId)
+      .then((res) => setIntegrations(res.integrations))
+      .catch(() => {})
+  }, [workspaceId])
+
+  useEffect(() => {
+    if (!exportMenuOpen) return
+    function handleClickOutside(e: MouseEvent) {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        setExportMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [exportMenuOpen])
 
   // ── 기본 편집 핸들러
 
@@ -649,7 +940,7 @@ export default function WbsPage() {
     }
   }
 
-  async function handleConfirmExport() {
+  async function handleConfirmExport(extraServices: string[] = []) {
     setPreviewData(null)
     setJiraProgress({ done: 0, total: 1, current: '준비 중...' })
     let exportResult: JiraExportResult | null = null
@@ -675,6 +966,26 @@ export default function WbsPage() {
             ? `JIRA 내보내기 완료 — 생성 ${r.created}개, 업데이트 ${r.updated}개`
             : 'JIRA 내보내기가 완료되었습니다.',
         )
+      }
+
+      // JIRA 완료 후 추가 선택 서비스 — JIRA 완료 알림 / Calendar 링크 첨부
+      if (extraServices.length > 0 && exportResult) {
+        const r = exportResult as JiraExportResult
+        try {
+          const notifyResult = await jiraNotify(meetingId!, workspaceId, {
+            services: extraServices,
+            created: r.created,
+            updated: r.updated,
+          })
+          const failed = Object.entries(notifyResult.results).filter(([, res]) => res.status === 'error')
+          if (failed.length > 0) {
+            showToast(`일부 실패: ${failed.map(([s]) => s).join(', ')}`, 'error')
+          } else {
+            showToast('Slack 알림 · Google Calendar 업데이트 완료')
+          }
+        } catch {
+          showToast('알림 전송에 실패했습니다.', 'error')
+        }
       }
 
       setSelectMode(false)
@@ -725,6 +1036,44 @@ export default function WbsPage() {
     }
   }
 
+  async function handleShareProgress() {
+    setProgressSharing(true)
+    try {
+      await shareWbsProgress(meetingId!, workspaceId)
+      showToast('진행률을 Slack에 공유했습니다.')
+    } catch {
+      showToast('Slack 공유에 실패했습니다.', 'error')
+    } finally {
+      setProgressSharing(false)
+    }
+  }
+
+  async function handleExportSlack() {
+    setExportMenuOpen(false)
+    setSlackExporting(true)
+    try {
+      await exportSlack(meetingId!, workspaceId)
+      showToast('Slack에 회의록을 전송했습니다.')
+    } catch {
+      showToast('Slack 전송에 실패했습니다.', 'error')
+    } finally {
+      setSlackExporting(false)
+    }
+  }
+
+  async function handleExportCalendar() {
+    setExportMenuOpen(false)
+    setCalendarExporting(true)
+    try {
+      await exportGoogleCalendar(meetingId!, workspaceId)
+      showToast('Google Calendar에 업데이트했습니다.')
+    } catch {
+      showToast('업데이트에 실패했습니다.', 'error')
+    } finally {
+      setCalendarExporting(false)
+    }
+  }
+
   // ─── 렌더링 ───────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -734,6 +1083,10 @@ export default function WbsPage() {
       </div>
     )
   }
+
+  const jiraConnected    = integrations.some(i => i.service === 'jira' && i.is_connected)
+  const slackConnected   = integrations.some(i => i.service === 'slack' && i.is_connected)
+  const googleConnected  = integrations.some(i => i.service === 'google_calendar' && i.is_connected)
 
   const selectedCount = selectedTasks.size
   const isEpicChecked = (epic: WbsEpic) =>
@@ -754,6 +1107,15 @@ export default function WbsPage() {
         </div>
       )}
 
+      {/* 다음 회의 예약 모달 */}
+      {nextMeetingOpen && (
+        <NextMeetingModal
+          meetingId={meetingId!}
+          workspaceId={workspaceId}
+          onClose={() => setNextMeetingOpen(false)}
+        />
+      )}
+
       {/* 모달 & 오버레이 */}
       {previewData && (
         <PreviewModal
@@ -761,6 +1123,9 @@ export default function WbsPage() {
           onClose={() => setPreviewData(null)}
           onConfirm={handleConfirmExport}
           loading={previewLoading}
+          connectedServices={integrations
+            .filter(i => i.is_connected && (i.service === 'slack' || i.service === 'google_calendar'))
+            .map(i => i.service)}
         />
       )}
       {jiraProgress && (
@@ -779,6 +1144,7 @@ export default function WbsPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">
+
           {/* 뷰 모드 토글 */}
           <div className="flex items-center rounded-lg border border-border overflow-hidden">
             <button
@@ -809,33 +1175,145 @@ export default function WbsPage() {
               )}
             >
               <CheckSquare size={13} />
-              {selectMode ? `${selectedCount}개 선택됨` : '선택 동기화'}
+              {selectMode ? `${selectedCount}개 선택` : '부분 선택'}
             </button>
           )}
 
-          {/* JIRA 내보내기 */}
-          {selectMode ? (
+          {/* 통합 내보내기 드롭다운 */}
+          <div className="relative" ref={exportMenuRef}>
             <button
-              onClick={() => openPreview(getSelectiveBody())}
-              disabled={selectedCount === 0 || previewLoading}
-              className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-accent text-accent-foreground text-sm font-medium hover:bg-accent/90 transition-colors disabled:opacity-50"
+              onClick={() => setExportMenuOpen(p => !p)}
+              disabled={epics.length === 0}
+              className={clsx(
+                'flex items-center gap-1.5 h-8 px-3 rounded-lg border text-sm transition-colors disabled:opacity-50',
+                exportMenuOpen
+                  ? 'border-accent text-accent bg-accent/10'
+                  : 'border-border text-muted-foreground hover:bg-muted/50',
+              )}
             >
-              {previewLoading ? <Loader2 size={13} className="animate-spin" /> : <ExternalLink size={13} />}
-              선택 내보내기
+              <ExternalLink size={13} />
+              {selectMode && selectedCount > 0 ? `내보내기 (${selectedCount})` : '내보내기'}
+              <ChevronDown size={11} className={clsx('transition-transform duration-150 ml-0.5', exportMenuOpen && 'rotate-180')} />
             </button>
-          ) : (
-            <button
-              onClick={() => openPreview()}
-              disabled={previewLoading || epics.length === 0}
-              className="flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border text-sm hover:bg-muted/50 transition-colors disabled:opacity-50"
-            >
-              {previewLoading ? <Loader2 size={13} className="animate-spin" /> : <ExternalLink size={13} />}
-              JIRA 내보내기
-            </button>
-          )}
+
+            {exportMenuOpen && (
+              <div className="absolute right-0 top-full mt-1.5 z-30 w-72 bg-card rounded-xl border border-border shadow-xl overflow-hidden">
+                {selectMode && selectedCount > 0 && (
+                  <div className="px-3 py-2 border-b border-border bg-accent/5">
+                    <p className="text-micro font-semibold text-accent">
+                      {selectedCount}개 태스크 선택됨 — JIRA는 선택 항목만 내보냅니다
+                    </p>
+                  </div>
+                )}
+
+                <div className="py-1">
+                  {/* JIRA 내보내기 */}
+                  <button
+                    disabled={!jiraConnected || previewLoading}
+                    onClick={() => { setExportMenuOpen(false); openPreview(selectMode ? getSelectiveBody() : {}) }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-accent/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-left"
+                  >
+                    <span className="text-[15px] shrink-0">🔵</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground">JIRA 내보내기</p>
+                      <p className="text-micro text-muted-foreground">에픽·태스크를 JIRA 이슈로 생성·업데이트</p>
+                    </div>
+                    {!jiraConnected
+                      ? <span className="text-micro text-red-400 shrink-0">미연결</span>
+                      : previewLoading
+                        ? <Loader2 size={12} className="animate-spin text-muted-foreground shrink-0" />
+                        : <ChevronRight size={12} className="text-muted-foreground/40 shrink-0" />
+                    }
+                  </button>
+
+                  <div className="mx-4 border-t border-border/50 my-0.5" />
+
+                  {/* Slack 회의록 */}
+                  <button
+                    disabled={!slackConnected || slackExporting}
+                    onClick={handleExportSlack}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-accent/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-left"
+                  >
+                    <span className="text-[15px] shrink-0">💬</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground">Slack 회의록 전송</p>
+                      <p className="text-micro text-muted-foreground">채널에 회의록·액션 아이템 전송</p>
+                    </div>
+                    {!slackConnected
+                      ? <span className="text-micro text-red-400 shrink-0">미연결</span>
+                      : slackExporting
+                        ? <Loader2 size={12} className="animate-spin text-muted-foreground shrink-0" />
+                        : null
+                    }
+                  </button>
+
+                  {/* Slack 진행률 공유 */}
+                  <button
+                    disabled={!slackConnected || progressSharing}
+                    onClick={() => { setExportMenuOpen(false); handleShareProgress() }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-accent/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-left"
+                  >
+                    <span className="text-[15px] shrink-0">📊</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground">Slack 진행률 공유</p>
+                      <p className="text-micro text-muted-foreground">담당자별 WBS 진행률을 채널에 전송</p>
+                    </div>
+                    {!slackConnected
+                      ? <span className="text-micro text-red-400 shrink-0">미연결</span>
+                      : progressSharing
+                        ? <Loader2 size={12} className="animate-spin text-muted-foreground shrink-0" />
+                        : null
+                    }
+                  </button>
+
+                  <div className="mx-4 border-t border-border/50 my-0.5" />
+
+                  {/* Google Calendar */}
+                  <button
+                    disabled={!googleConnected || calendarExporting}
+                    onClick={handleExportCalendar}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-accent/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-left"
+                  >
+                    <span className="text-[15px] shrink-0">📅</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground">Google Calendar</p>
+                      <p className="text-micro text-muted-foreground">캘린더 이벤트에 JIRA · WBS 링크 첨부</p>
+                    </div>
+                    {!googleConnected
+                      ? <span className="text-micro text-red-400 shrink-0">미연결</span>
+                      : calendarExporting
+                        ? <Loader2 size={12} className="animate-spin text-muted-foreground shrink-0" />
+                        : null
+                    }
+                  </button>
+                </div>
+
+                {/* 다음 회의 예약 */}
+                <div className="border-t border-border mt-1 pt-1">
+                  <button
+                    onClick={() => { setExportMenuOpen(false); setNextMeetingOpen(true) }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-accent/5 transition-colors text-left"
+                  >
+                    <span className="text-[15px] shrink-0">🗓️</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground">다음 회의 예약</p>
+                      <p className="text-micro text-muted-foreground">AI 일정 추천 → 회의 생성 페이지로 이동</p>
+                    </div>
+                    <ChevronRight size={12} className="text-muted-foreground/40 shrink-0" />
+                  </button>
+                </div>
+
+                <div className="px-4 py-2 border-t border-border bg-muted/20">
+                  <a href="/settings/integrations" className="text-micro text-accent hover:underline">
+                    연동 설정 →
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* JIRA 동기화 */}
-          <div className="flex flex-col items-end">
+          <div className="flex flex-col items-end gap-1">
             <button
               onClick={handleJiraSync}
               disabled={jiraSyncing || epics.length === 0}
@@ -845,8 +1323,8 @@ export default function WbsPage() {
               JIRA 동기화
             </button>
             {lastSyncAt && (
-              <span className="text-micro text-muted-foreground mt-0.5">
-                마지막: {formatSyncTime(lastSyncAt)}
+              <span className="text-micro text-muted-foreground">
+                {formatSyncTime(lastSyncAt)}
               </span>
             )}
           </div>
