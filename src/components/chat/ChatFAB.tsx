@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Send, Loader2, Paperclip, CheckCircle2, FileBarChart2 } from 'lucide-react'
+import { X, Send, Loader2, Paperclip, CheckCircle2, FileText } from 'lucide-react'
 import clsx from 'clsx'
 import ReactMarkdown from 'react-markdown'
 import WorkbAssistantAvatar from './WorkbAssistantAvatar'
@@ -437,18 +437,18 @@ export default function ChatFAB() {
                     <div>
                       {msg.function_type === 'quick_report' && meetingId && (                                            
                           <a
-                            href={`/meetings/${meetingId}/reports?tab=reports`}
+                            href={`/meetings/${meetingId}/reports?tab=minutes`}
                             className="mt-2 flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border text-mini hover:bg-muted transition-colors w-fit"
                           > 
-                            <FileBarChart2 size={12} /> 정식 보고서는 회의록 페이지에서
+                            <FileText size={12} /> 회의록 페이지에서 생성하기
                           </a>
                         )}                        
                         {msg.function_type === 'report_guide' && meetingId && (                                            
                           <a
-                            href={`/meetings/${meetingId}/reports?tab=reports`}
+                            href={`/meetings/${meetingId}/reports?tab=minutes`}
                             className="mt-2 flex items-center gap-1.5 h-8 px-3 rounded-lg bg-accent text-accent-foreground text-mini font-medium hover:bg-accent/90 transition-colors w-fit"
                           >
-                            <FileBarChart2 size={12} /> 회의록 페이지로 이동
+                            <FileText size={12} /> 회의록 페이지로 이동
                           </a>
                         )}
                     </div>

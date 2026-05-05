@@ -52,9 +52,6 @@ export function registerNextMeeting(
   )
 }
 
-/**
- * 다음 회의 일정 수정 (구글 캘린더 연동 등)
- */
 export function updateNextMeeting(
   meetingId: string | number,
   workspaceId: number,
@@ -63,16 +60,10 @@ export function updateNextMeeting(
 ) {
   return apiFetch<{ event_id: string }>(
     `/actions/meetings/${meetingId}/next-meeting/${eventId}?workspace_id=${workspaceId}`,
-    { 
-      method: 'PATCH', 
-      body: JSON.stringify(body) 
-    },
-  );
+    { method: 'PATCH', body: JSON.stringify(body) },
+  )
 }
 
-/**
- * 다음 회의 일정 삭제
- */
 export function deleteNextMeeting(
   meetingId: string | number,
   workspaceId: number,
@@ -80,12 +71,9 @@ export function deleteNextMeeting(
 ) {
   return apiFetch<{ status: string }>(
     `/actions/meetings/${meetingId}/next-meeting/${eventId}?workspace_id=${workspaceId}`,
-    { 
-      method: 'DELETE' 
-    },
-  );
+    { method: 'DELETE' },
+  )
 }
-
 
 // ── JIRA ──────────────────────────────────────────────────────────────
 export interface JiraPreviewTask {
@@ -200,12 +188,19 @@ export function syncJira(meetingId: string | number, workspaceId: number) {
     `/actions/meetings/${meetingId}/sync/jira?workspace_id=${workspaceId}`,
   )
 }
-
 // ── 회의록 ────────────────────────────────────────────────────────────
 export interface MinutesResponse {
   meeting_id: number
   content: string | null
   updated_at: string
+}
+
+export interface MinutesPdfPreview {
+  preview_b64:  string
+  field_coords: Record<string, never>
+  field_values: Record<string, string>
+  pdf_width:    number
+  pdf_height:   number
 }
 
 export function generateMinutes(meetingId: string | number, workspaceId: number) {
@@ -221,6 +216,12 @@ export function getMinutes(meetingId: string | number, workspaceId: number) {
   )
 }
 
+export function ensureMinutes(meetingId: string | number, workspaceId: number) {
+  return apiFetch<MinutesResponse>(
+    `/actions/meetings/${meetingId}/minutes/ensure?workspace_id=${workspaceId}`,
+  )
+}
+
 export function patchMinutes(
   meetingId: string | number,
   workspaceId: number,
@@ -232,40 +233,47 @@ export function patchMinutes(
   )
 }
 
-// ── 보고서 ────────────────────────────────────────────────────────────
-export interface ReportItem {
-  id: number
-  format: string
-  title: string
-  thumbnail_url: string | null
-  updated_at: string
-}
-
-export function generateReport(
+export function getMinutesPdfPreview(
   meetingId: string | number,
   workspaceId: number,
-  format: string,
+  fieldValues?: Record<string, string>,
 ) {
-  return apiFetch<{ status: string }>(
-    `/actions/meetings/${meetingId}/reports/generate?workspace_id=${workspaceId}`,
-    { method: 'POST', body: JSON.stringify({ format }) },
+  return apiFetch<MinutesPdfPreview>(
+    `/actions/meetings/${meetingId}/minutes/pdf-preview?workspace_id=${workspaceId}`,
+    {
+      method: 'POST',
+      body: fieldValues ? JSON.stringify({ field_values: fieldValues }) : undefined,
+    },
   )
 }
 
-export function getReports(meetingId: string | number, workspaceId: number) {
-  return apiFetch<ReportItem[]>(
-    `/actions/meetings/${meetingId}/reports?workspace_id=${workspaceId}`,
-  )
-}
-
-export async function downloadReport(
+export async function downloadMinutesPdf(
   meetingId: string | number,
-  reportId: number,
+  workspaceId: number,
+) {
+  const token = getAccessToken()
+  const res = await fetch(
+    `${API_BASE_URL}/actions/meetings/${meetingId}/minutes/pdf?workspace_id=${workspaceId}`,
+    { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+  )
+  if (!res.ok) throw new Error('PDF 다운로드에 실패했습니다.')
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `minutes_${meetingId}.pdf`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+// ── 보고서 다운로드 (내보내기 탭용) ──────────────────────────────────
+export async function downloadMinutes(
+  meetingId: string | number,
   workspaceId: number,
   filename: string,
 ) {
   const token = getAccessToken()
-  const url = `${API_BASE_URL}/actions/meetings/${meetingId}/reports/${reportId}/download?workspace_id=${workspaceId}`
+  const url = `${API_BASE_URL}/actions/meetings/${meetingId}/minutes/view?workspace_id=${workspaceId}`
   const res = await fetch(url, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   })
