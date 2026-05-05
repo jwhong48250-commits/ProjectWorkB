@@ -34,6 +34,8 @@ import ReportsPage from './pages/meetings/ReportsPage'
 import ExportPage from './pages/meetings/ExportPage'
 import MeetingSelectPage from './pages/meetings/MeetingSelectPage'
 import UpcomingMeetingPage from './pages/meetings/UpcomingMeetingPage'
+import SimulatePage from './pages/meetings/SimulatePage'
+import SimulateSelectPage from './pages/meetings/SimulateSelectPage'
 
 // Live pages
 import LivePage from './pages/live/LivePage'
@@ -113,6 +115,8 @@ export default function App() {
           <Route path="meetings/:meetingId/wbs" element={<WbsPage />} />
           <Route path="meetings/:meetingId/reports" element={<ReportsPage />} />
           <Route path="meetings/:meetingId/export" element={<ExportPage />} />
+          <Route path="meetings/simulate-select" element={<SimulateSelectPage />} />
+          <Route path="meetings/:meetingId/simulate" element={<SimulatePage />} />
 
           {/* 설정 */}
           <Route path="settings" element={<Navigate to="/settings/my" replace />} />

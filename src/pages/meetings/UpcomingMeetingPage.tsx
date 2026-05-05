@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { ArrowLeft, Clock, Users, Calendar, Video, Trash2, Edit2 } from 'lucide-react'
+import { ArrowLeft, Clock, Users, Calendar, Video, Trash2, Edit2, FlaskConical } from 'lucide-react'
 import { formatTime } from '../../utils/format'
 import { persistMeetingSnapshot, readMeetingSnapshotForRoute } from '../../utils/meetingRoutes'
 import type { Meeting } from '../../types/meeting'
@@ -252,6 +252,15 @@ export default function UpcomingMeetingPage() {
 
       {workspaceRole === 'admin' && (
         <div className="mt-4 flex items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={() => navigate(`/meetings/${meetingId}/simulate`)}
+            className="inline-flex items-center gap-1.5 text-mini text-muted-foreground hover:text-foreground transition-colors"
+            title="WAV 파일로 회의 시뮬레이션 (개발·QA 전용)"
+          >
+            <FlaskConical size={13} aria-hidden="true" />
+            WAV 시뮬레이션
+          </button>
           <Link
             to="/meetings/new"
             state={{ draftMeeting: meeting }}
