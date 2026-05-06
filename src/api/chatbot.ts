@@ -84,6 +84,7 @@ export async function getPastMeetings(
 export interface ChatSession {
     session_id: string
     created_at: string
+    title: string | null
     preview: string
 }
 
@@ -93,6 +94,13 @@ export async function createChatSession(workspaceId: number): Promise<{ session_
 
 export async function listChatSessions(workspaceId: number): Promise<{ sessions: ChatSession[] }> {
     return apiRequest(`/knowledges/workspace/${workspaceId}/chatbot/sessions`)
+}
+
+export async function renameChatSession(workspaceId: number, sessionId: string, title: string): Promise<void> {
+    await apiRequest(`/knowledges/workspace/${workspaceId}/chatbot/sessions/${sessionId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ title }),
+    })
 }
 
 export async function deleteChatSession(workspaceId: number, sessionId: string): Promise<void> {
