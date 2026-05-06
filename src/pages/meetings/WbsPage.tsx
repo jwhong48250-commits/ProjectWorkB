@@ -608,6 +608,7 @@ function fromApi(epics: WbsEpicApi[]): WbsEpic[] {
           id: String(t.id),
           epicId: String(epic.id),
           title: t.title,
+          content: t.content ?? undefined,
           assigneeName: t.assignee_name ?? undefined,
           priority: toPriority(t.priority),
           urgency: t.urgency ?? undefined,
@@ -745,13 +746,13 @@ export default function WbsPage() {
   }
 
   async function handleGenerate() {
-    if (epics.length > 0) {
-      if (!confirm('기존 WBS가 모두 삭제되고 새로 생성됩니다. 계속하시겠습니까?')) return
-    }
+    if (!confirm('처음 생성된 WBS로 되돌립니다. 현재 변경사항이 모두 사라집니다. 계속하시겠습니까?')) return
     setGenerating(true)
     try {
       const d = await generateWbs(meetingId!, workspaceId)
       setEpics(fromApi(d.epics))
+    } catch {
+      showToast('원본 WBS가 없습니다. 회의 종료 후 자동 생성될 때까지 기다려주세요.', 'error')
     } finally { setGenerating(false) }
   }
 
@@ -1291,15 +1292,19 @@ export default function WbsPage() {
                 {/* 다음 회의 예약 */}
                 <div className="border-t border-border mt-1 pt-1">
                   <button
+                    disabled={!slackConnected || !googleConnected}
                     onClick={() => { setExportMenuOpen(false); setNextMeetingOpen(true) }}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-accent/5 transition-colors text-left"
+                    className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-accent/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-left"
                   >
                     <span className="text-[15px] shrink-0">🗓️</span>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-foreground">다음 회의 예약</p>
                       <p className="text-micro text-muted-foreground">AI 일정 추천 → 회의 생성 페이지로 이동</p>
                     </div>
-                    <ChevronRight size={12} className="text-muted-foreground/40 shrink-0" />
+                    {(!slackConnected || !googleConnected)
+                      ? <span className="text-micro text-red-400 shrink-0">미연결</span>
+                      : <ChevronRight size={12} className="text-muted-foreground/40 shrink-0" />
+                    }
                   </button>
                 </div>
 
@@ -1316,7 +1321,8 @@ export default function WbsPage() {
           <div className="flex flex-col items-end gap-1">
             <button
               onClick={handleJiraSync}
-              disabled={jiraSyncing || epics.length === 0}
+              disabled={jiraSyncing || epics.length === 0 || !jiraConnected}
+              title={!jiraConnected ? 'JIRA 연동이 필요합니다' : undefined}
               className="flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border text-sm hover:bg-muted/50 transition-colors disabled:opacity-50"
             >
               {jiraSyncing ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
@@ -1341,13 +1347,10 @@ export default function WbsPage() {
 
       {/* 빈 상태 */}
       {epics.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-24 gap-4 rounded-xl border border-dashed border-border">
+        <div className="flex flex-col items-center justify-center py-24 gap-3 rounded-xl border border-dashed border-border">
           <Sparkles size={28} className="text-muted-foreground/40" />
-          <p className="text-sm text-muted-foreground">WBS가 아직 없습니다. AI로 자동 생성하세요.</p>
-          <button onClick={handleGenerate} disabled={generating}
-            className="flex items-center gap-1.5 h-8 px-4 rounded-lg bg-accent text-accent-foreground text-sm font-medium hover:bg-accent/90 disabled:opacity-60">
-            {generating ? <><Loader2 size={13} className="animate-spin" /> 생성 중...</> : <><Sparkles size={13} /> AI WBS 생성</>}
-          </button>
+          <p className="text-sm text-muted-foreground">회의 종료 후 WBS가 자동으로 생성됩니다.</p>
+          <p className="text-mini text-muted-foreground/60">파이프라인이 완료되면 이 페이지에서 확인할 수 있습니다.</p>
         </div>
       ) : viewMode === 'gantt' ? (
         <GanttView epics={epics} />
