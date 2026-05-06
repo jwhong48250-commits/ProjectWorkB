@@ -27,6 +27,9 @@ export interface WorkspaceMember {
   role: UserRole
   department_id: number | null
   department: string | null
+  birth_date: string | null
+  age: number | null
+  gender: 'male' | 'female' | null
 }
 
 export interface Department {
@@ -145,6 +148,20 @@ export async function updateMemberDepartment(
     {
       method: 'PATCH',
       body: JSON.stringify({ department_id: departmentId }),
+    },
+  )
+}
+
+export async function updateMemberProfile(
+  workspaceId: number,
+  userId: number,
+  payload: { birth_date: string | null; gender: 'male' | 'female' | null },
+): Promise<{ user_id: number; birth_date: string | null; age: number | null; gender: 'male' | 'female' | null }> {
+  return apiRequest<{ user_id: number; birth_date: string | null; age: number | null; gender: 'male' | 'female' | null }>(
+    `/workspaces/${workspaceId}/members/${userId}/profile`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
     },
   )
 }

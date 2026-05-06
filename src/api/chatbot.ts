@@ -5,7 +5,7 @@ export interface SendMessageResponse {
     session_id: string
     function_type: string
     answer: string
-    result: { sources?: WebSource[] }
+    result: { sources?: WebSource[]; action_button?: string | null }
     timestamp: string
 }
 
@@ -79,6 +79,24 @@ export async function getPastMeetings(
     return apiRequest<PastMeetingsResponse> (
         `/knowledges/workspace/${workspaceId}/past_meetings`,
     )
+}
+
+export interface ChatSession {
+    session_id: string
+    created_at: string
+    preview: string
+}
+
+export async function createChatSession(workspaceId: number): Promise<{ session_id: string }> {
+    return apiRequest(`/knowledges/workspace/${workspaceId}/chatbot/sessions`, { method: 'POST' })
+}
+
+export async function listChatSessions(workspaceId: number): Promise<{ sessions: ChatSession[] }> {
+    return apiRequest(`/knowledges/workspace/${workspaceId}/chatbot/sessions`)
+}
+
+export async function deleteChatSession(workspaceId: number, sessionId: string): Promise<void> {
+    await apiRequest(`/knowledges/workspace/${workspaceId}/chatbot/sessions/${sessionId}`, { method: 'DELETE' })
 }
 
 export async function uploadDocument(workspaceId: number, file: File): Promise<void> {

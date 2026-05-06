@@ -1,20 +1,16 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import clsx from 'clsx'
 import { getSocialOAuthUrl, login, type SocialProvider } from '../../api/auth'
 import { useAuth } from '../../context/AuthContext'
 
-type Tab = 'admin' | 'member'
-
 export default function LoginPage() {
-  const [tab, setTab] = useState<Tab>('admin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
-  const { refreshSession, signOut } = useAuth()
+  const { refreshSession } = useAuth()
   const returnTo = typeof location.state === 'object'
     && location.state
     && 'from' in location.state
@@ -49,24 +45,7 @@ export default function LoginPage() {
 
     try {
       await login({ email, password })
-      const sessionUser = await refreshSession()
-
-      if (tab === 'admin' && sessionUser?.role !== 'admin') {
-        await signOut()
-        setError('관리자 계정으로 로그인해주세요.')
-        return
-      }
-
-      if (tab === 'member') {
-        const invalidMemberSession = !sessionUser || sessionUser.role === 'admin'
-
-        if (invalidMemberSession) {
-          await signOut()
-          setError('멤버 계정으로 로그인해주세요.')
-          return
-        }
-      }
-
+      await refreshSession()
       navigate(returnTo, { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : '로그인에 실패했습니다.')
@@ -80,7 +59,7 @@ export default function LoginPage() {
     setError('')
 
     try {
-      const { auth_url } = await getSocialOAuthUrl(provider, tab)
+      const { auth_url } = await getSocialOAuthUrl(provider)
       window.location.href = auth_url
     } catch (err) {
       setError(err instanceof Error ? err.message : '소셜 로그인을 시작하지 못했습니다.')
@@ -92,24 +71,6 @@ export default function LoginPage() {
     <div className="w-full max-w-sm">
       <h1 className="text-2xl font-bold text-foreground text-center mb-1">로그인</h1>
       <p className="text-sm text-muted-foreground text-center mb-6">워크스페이스에 오신 것을 환영합니다.</p>
-
-      {/* Tab */}
-      <div role="tablist" className="flex rounded-lg bg-muted p-1 mb-6">
-        {(['admin', 'member'] as Tab[]).map((t) => (
-          <button
-            key={t}
-            role="tab"
-            aria-selected={tab === t}
-            onClick={() => setTab(t)}
-            className={clsx(
-              'flex-1 py-1.5 rounded-md text-sm font-medium transition-colors',
-              tab === t ? 'bg-card shadow text-foreground' : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            {t === 'admin' ? '관리자' : '멤버'}
-          </button>
-        ))}
-      </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
         <div>
@@ -159,7 +120,8 @@ export default function LoginPage() {
           disabled={loading}
           className="h-10 rounded-lg border border-border bg-card text-sm font-medium hover:bg-muted/50 transition-colors flex items-center justify-center gap-2"
         >
-          <span>🔵</span> Google로 계속하기
+          <img src="/brand/google.webp" alt="" className="h-5 w-5 object-contain" aria-hidden="true" />
+          Google로 계속하기
         </button>
         <button
           type="button"
@@ -167,21 +129,19 @@ export default function LoginPage() {
           disabled={loading}
           className="h-10 rounded-lg border border-border bg-[#FEE500] text-[#3A1D1D] text-sm font-medium hover:bg-[#FEE500]/90 transition-colors flex items-center justify-center gap-2"
         >
-          <span>💛</span> 카카오로 계속하기
+          <img src="/brand/kakaotalk-transparent.png" alt="" className="h-5 w-5 object-contain" aria-hidden="true" />
+          카카오로 계속하기
         </button>
       </form>
 
       <div className="flex flex-col items-center gap-2 mt-6 text-sm text-muted-foreground">
         <Link to="/reset-password" className="hover:text-foreground transition-colors">비밀번호를 잊으셨나요?</Link>
-        <span>
-          계정이 없으신가요?{' '}
-          <Link
-            to={tab === 'admin' ? '/signup/admin' : '/signup/member'}
-            className="text-accent font-medium hover:underline"
-          >
-            {tab === 'admin' ? '관리자 회원가입' : '멤버 회원가입'}
-          </Link>
-        </span>
+        <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
+          <span>계정이 없으신가요?</span>
+          <Link to="/signup/member" className="text-accent font-medium hover:underline">멤버 회원가입</Link>
+          <span className="text-border">|</span>
+          <Link to="/signup/admin" className="text-accent font-medium hover:underline">관리자 회원가입</Link>
+        </div>
       </div>
     </div>
   )
