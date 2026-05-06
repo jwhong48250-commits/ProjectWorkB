@@ -1,24 +1,25 @@
 import { useState, useEffect, type ReactNode } from 'react'
 import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import {
-  Sparkles, FileSpreadsheet, Code, Download, FileText, GitBranch,
-  Loader2, Check, Edit2, ChevronDown, ChevronUp, X,
-  ArrowLeft, FileBarChart2, Share2, ExternalLink, Lock, ChevronRight,
+  Sparkles, FileText, Share2, Loader2,
+  X, ArrowLeft,
+  RefreshCw, Lock, ExternalLink, ChevronRight, Download, Pencil, Check,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { getCurrentWorkspaceId } from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
 import {
-  generateMinutes, getMinutes,
-  generateReport, getReports, downloadReport,
+  generateMinutes, getMinutes, ensureMinutes,
+  getMinutesPdfPreview, downloadMinutesPdf,
   exportSlack, exportGoogleCalendar,
-  suggestNextMeeting, registerNextMeeting, updateNextMeeting,
+  suggestNextMeeting, registerNextMeeting,
   deleteNextMeeting,
-  type MinutesResponse, type ReportItem, type TimeSlot,
+  type MinutesResponse, type TimeSlot,
+  type MinutesPdfPreview,
 } from '../../api/actions'
 import { getIntegrations, type ServiceName } from '../../api/integrations'
+import { fetchWorkspaceMeetingDetail } from '../../api/meetings'
 
-// 결과가 나올 때까지 최대 10회 폴링 (간격 1.5s = 최대 15s 대기)
 async function pollUntil(
   check: () => Promise<boolean>,
   maxAttempts = 10,
@@ -31,38 +32,24 @@ async function pollUntil(
   return false
 }
 
-// ── 탭 정의 ───────────────────────────────────────────────────────────────────
-type Tab = 'minutes' | 'reports' | 'export'
+// ── 탭 정의 ──────────────────────────────────────────────────────────
+type Tab = 'minutes' | 'export'
 
 const TABS: { id: Tab; label: string; icon: ReactNode }[] = [
   { id: 'minutes', label: '회의록', icon: <FileText size={14} /> },
-  { id: 'reports', label: '보고서', icon: <FileBarChart2 size={14} /> },
   { id: 'export',  label: '내보내기', icon: <Share2 size={14} /> },
 ]
 
-// ── 포맷 정의 ─────────────────────────────────────────────────────────────────
-type Format = 'markdown' | 'html' | 'excel' | 'wbs'
-
-const FORMAT_OPTIONS: { id: Format; label: string; icon: ReactNode; desc: string }[] = [
-  { id: 'markdown', label: 'Markdown', icon: <FileText size={18} />,        desc: '텍스트 기반' },
-  { id: 'html',     label: 'HTML',     icon: <Code size={18} />,            desc: '웹 공유용' },
-  { id: 'excel',    label: 'Excel',    icon: <FileSpreadsheet size={18} />, desc: '표·데이터' },
-  { id: 'wbs',      label: 'WBS',      icon: <GitBranch size={18} />,       desc: '태스크 구조' },
-]
-
-const FORMAT_EXT: Record<Format, string> = {
-  markdown: 'md', html: 'html', excel: 'xlsx', wbs: 'json',
-}
-
-// ── 내보내기 서비스 정의 ──────────────────────────────────────────────────────
+// ── 내보내기 서비스 정의 ──────────────────────────────────────────────
 const EXPORT_SERVICES = [
-  { id: 'slack',            label: 'Slack',           icon: '💬', desc: '선택한 채널에 회의록 공유',       service: 'slack' as ServiceName,            implemented: true },
-  { id: 'google-calendar',  label: 'Google Calendar', icon: '📅', desc: '캘린더 이벤트에 회의록 첨부',     service: 'google_calendar' as ServiceName,  implemented: true },
-  { id: 'notion',           label: 'Notion',          icon: '📝', desc: 'Notion 페이지로 자동 저장',       service: 'notion' as ServiceName,           implemented: false },
-  { id: 'jira',             label: 'JIRA',            icon: '🔵', desc: 'WBS 태스크를 JIRA 이슈로 생성',  service: 'jira' as ServiceName,             implemented: false },
+  { id: 'slack',           label: 'Slack',           icon: '💬', desc: '선택한 채널에 회의록 공유',      service: 'slack' as ServiceName,           implemented: true },
+  { id: 'google-calendar', label: 'Google Calendar', icon: '📅', desc: '캘린더 이벤트에 회의록 첨부',    service: 'google_calendar' as ServiceName, implemented: true },
+  { id: 'notion',          label: 'Notion',          icon: '📝', desc: 'Notion 페이지로 자동 저장',      service: 'notion' as ServiceName,          implemented: false },
+  { id: 'jira',            label: 'JIRA',            icon: '🔵', desc: 'WBS 태스크를 JIRA 이슈로 생성', service: 'jira' as ServiceName,            implemented: false },
 ]
 
-// ── 메인 컴포넌트 ─────────────────────────────────────────────────────────────
+
+// ── 메인 컴포넌트 ──────────────────────────────────────────────────────
 export default function ReportsPage() {
   const { meetingId } = useParams()
   const navigate = useNavigate()
@@ -71,8 +58,18 @@ export default function ReportsPage() {
   const workspaceId = getCurrentWorkspaceId()
   const { isAdmin } = useAuth()
 
-  const activeTab = (searchParams.get('tab') as Tab) ?? 'minutes'
-  const meetingTitle: string = (location.state as { meetingTitle?: string } | null)?.meetingTitle ?? `회의 #${meetingId}`
+  const rawTab = searchParams.get('tab')
+  const activeTab: Tab = rawTab === 'export' ? 'export' : 'minutes'
+
+  const stateTitle = (location.state as { meetingTitle?: string } | null)?.meetingTitle
+  const [meetingTitle, setMeetingTitle] = useState<string>(stateTitle ?? '')
+
+  useEffect(() => {
+    if (stateTitle || !meetingId) return
+    fetchWorkspaceMeetingDetail(workspaceId, Number(meetingId))
+      .then((m) => setMeetingTitle(m.title))
+      .catch(() => setMeetingTitle(`회의 #${meetingId}`))
+  }, [meetingId, workspaceId, stateTitle])
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
 
@@ -87,7 +84,6 @@ export default function ReportsPage() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Toast */}
       {toast && (
         <div className={clsx(
           'fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg text-sm font-medium',
@@ -111,7 +107,6 @@ export default function ReportsPage() {
           <h1 className="text-lg font-semibold text-foreground truncate">{meetingTitle}</h1>
         </div>
 
-        {/* 탭 */}
         <div className="flex gap-1">
           {TABS.map((tab) => (
             <button
@@ -131,13 +126,9 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* 탭 콘텐츠 */}
       <div className="flex-1 overflow-y-auto">
         {activeTab === 'minutes' && (
           <MinutesTab meetingId={meetingId!} workspaceId={workspaceId} showToast={showToast} />
-        )}
-        {activeTab === 'reports' && (
-          <ReportsTab meetingId={meetingId!} workspaceId={workspaceId} showToast={showToast} />
         )}
         {activeTab === 'export' && (
           <ExportTab meetingId={meetingId!} workspaceId={workspaceId} isAdmin={isAdmin} showToast={showToast} />
@@ -147,43 +138,55 @@ export default function ReportsPage() {
   )
 }
 
-// ── 회의록 탭 ─────────────────────────────────────────────────────────────────
+// ── 회의록 탭 ─────────────────────────────────────────────────────────
 function MinutesTab({
   meetingId, workspaceId, showToast,
 }: {
-  meetingId: string; workspaceId: number; showToast: (m: string, t?: 'success' | 'error') => void
+  meetingId: string
+  workspaceId: number
+  showToast: (m: string, t?: 'success' | 'error') => void
 }) {
-  const navigate = useNavigate()
   const [minutes, setMinutes] = useState<MinutesResponse | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loadingMinutes, setLoadingMinutes] = useState(true)
   const [generating, setGenerating] = useState(false)
-  const [expanded, setExpanded] = useState(false)
+  const [pdfPreview, setPdfPreview] = useState<MinutesPdfPreview | null>(null)
+  const [loadingPdf, setLoadingPdf] = useState(false)
 
-  async function load() {
-    try {
-      const data = await getMinutes(meetingId, workspaceId)
-      setMinutes(data)
-    } catch {
-      setMinutes(null)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => { load() }, [meetingId])
+  // 진입 시: 회의록 ensure → 즉시 PDF 자동 생성
+  useEffect(() => {
+    ensureMinutes(meetingId, workspaceId)
+      .then((data) => {
+        setMinutes(data)
+        setLoadingMinutes(false)
+        setLoadingPdf(true)
+        return getMinutesPdfPreview(meetingId, workspaceId)
+          .then((res) => setPdfPreview(res))
+          .catch(() => showToast('PDF 생성에 실패했습니다.', 'error'))
+          .finally(() => setLoadingPdf(false))
+      })
+      .catch(() => {
+        showToast('회의록을 불러오는 데 실패했습니다.', 'error')
+        setLoadingMinutes(false)
+      })
+  }, [meetingId, workspaceId])
 
   async function handleGenerate() {
     setGenerating(true)
+    setPdfPreview(null)
+    const prevUpdatedAt = minutes?.updated_at
     try {
       await generateMinutes(meetingId, workspaceId)
       const ok = await pollUntil(async () => {
         const data = await getMinutes(meetingId, workspaceId).catch(() => null)
-        if (data?.content) { setMinutes(data); return true }
+        const isDone = prevUpdatedAt
+          ? data?.updated_at != null && data.updated_at !== prevUpdatedAt
+          : Boolean(data?.content)
+        if (isDone && data) { setMinutes(data); return true }
         return false
       })
       if (ok) {
         showToast('회의록이 생성되었습니다.')
-        setExpanded(true)
+        handlePdfPreview()
       } else {
         showToast('회의록 생성에 실패했습니다. 회의 요약 데이터를 확인해주세요.', 'error')
       }
@@ -194,256 +197,333 @@ function MinutesTab({
     }
   }
 
-  return (
-    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
-      {loading ? (
-        <div className="flex justify-center py-16">
-          <Loader2 size={20} className="animate-spin text-muted-foreground" />
-        </div>
-      ) : !minutes?.content ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-accent/10 flex items-center justify-center">
-            <FileText size={22} className="text-accent" />
-          </div>
-          <div className="text-center">
-            <p className="text-sm font-medium text-foreground mb-1">회의록이 아직 없습니다</p>
-            <p className="text-mini text-muted-foreground">AI가 회의 내용을 분석하여 자동으로 생성합니다.</p>
-          </div>
-          <button
-            onClick={handleGenerate}
-            disabled={generating}
-            className="flex items-center gap-2 h-10 px-6 rounded-lg bg-accent text-accent-foreground text-sm font-medium hover:bg-accent/90 transition-colors disabled:opacity-60"
-          >
-            {generating
-              ? <><Loader2 size={14} className="animate-spin" /> 생성 중...</>
-              : <><Sparkles size={14} /> AI 회의록 생성</>
-            }
-          </button>
-        </div>
-      ) : (
-        <div className="rounded-xl border border-border bg-card overflow-hidden">
-          {/* 헤더 */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
-            <div className="flex items-center gap-2">
-              <Check size={13} className="text-green-500" />
-              <span className="text-sm font-medium text-foreground">생성 완료</span>
-              <span className="text-mini text-muted-foreground">
-                · {new Date(minutes.updated_at).toLocaleString('ko-KR')}
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => navigate(`/meetings/${meetingId}/notes/edit`)}
-                className="flex items-center gap-1 h-7 px-2.5 rounded border border-border text-mini hover:bg-muted transition-colors"
-              >
-                <Edit2 size={11} /> 편집
-              </button>
-              <button
-                onClick={() => setExpanded((v) => !v)}
-                className="flex items-center gap-1 h-7 px-2.5 rounded border border-border text-mini hover:bg-muted transition-colors"
-              >
-                {expanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
-                {expanded ? '접기' : '내용 보기'}
-              </button>
-            </div>
-          </div>
+  async function handlePdfPreview(fieldValues?: Record<string, string>) {
+    setLoadingPdf(true)
+    try {
+      const res = await getMinutesPdfPreview(meetingId, workspaceId, fieldValues)
+      setPdfPreview(res)
+    } catch {
+      showToast('PDF 미리보기 생성에 실패했습니다.', 'error')
+    } finally {
+      setLoadingPdf(false)
+    }
+  }
 
-          {/* 내용 */}
-          {expanded ? (
-            <div className="px-5 py-4">
-              <pre className="whitespace-pre-wrap text-sm text-foreground font-sans leading-relaxed">
-                {minutes.content}
-              </pre>
-            </div>
-          ) : (
-            <div className="px-5 py-4">
-              <p className="text-sm text-muted-foreground line-clamp-3">
-                {minutes.content?.substring(0, 200)}...
-              </p>
+  async function handlePdfDownload() {
+    try {
+      await downloadMinutesPdf(meetingId, workspaceId)
+    } catch {
+      showToast('PDF 다운로드에 실패했습니다.', 'error')
+    }
+  }
+
+  if (loadingMinutes) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 gap-2 text-muted-foreground">
+        <Loader2 size={20} className="animate-spin" />
+        <p className="text-sm">회의록 불러오는 중...</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6 space-y-4">
+      {/* ── 메인: PDF 미리보기 · 필드 편집 ─────────────────────────── */}
+      <PdfOverlayEditor
+        pdfPreview={pdfPreview}
+        loading={loadingPdf}
+        generating={generating}
+        onRegenerate={handleGenerate}
+        onRefresh={(fv) => handlePdfPreview(fv)}
+        onGeneratePreview={() => handlePdfPreview()}
+        onDownload={handlePdfDownload}
+      />
+
+    </div>
+  )
+}
+
+// ── PDF 미리보기 · 필드 편집 ───────────────────────────────────────────
+const FIELD_LABEL: Record<string, string> = {
+  agenda_items:        '회의 안건',
+  discussion_content:  '회의 내용',
+  decisions:           '결정 사항',
+  action_items:        '액션 아이템',
+  special_notes:       '특이 사항',
+  datetime:            '회의 일시',
+  attendees:           '참석자',
+  dept:                '부서',
+  author:              '작성자',
+  department_author:   '부서 / 작성자',
+  title:               '제목',
+}
+
+const PDF_PREVIEW_ZOOM_LEVELS = [0.8, 0.9, 1, 1.15, 1.3] as const
+
+function PdfOverlayEditor({
+  pdfPreview,
+  loading,
+  generating,
+  onRegenerate,
+  onRefresh,
+  onGeneratePreview,
+  onDownload,
+}: {
+  pdfPreview: MinutesPdfPreview | null
+  loading: boolean
+  generating: boolean
+  onRegenerate: () => void
+  onRefresh: (fieldValues: Record<string, string>) => void
+  onGeneratePreview: () => void
+  onDownload: () => void
+}) {
+  const [editValues, setEditValues] = useState<Record<string, string>>({})
+  const [isDirty, setIsDirty] = useState(false)
+  const [focusedKey, setFocusedKey] = useState<string | null>(null)
+  const [showEditPanel, setShowEditPanel] = useState(false)
+  const [zoomIdx, setZoomIdx] = useState(2)
+
+  useEffect(() => {
+    if (pdfPreview?.field_values) {
+      setEditValues(pdfPreview.field_values)
+      setIsDirty(false)
+      setShowEditPanel(false)
+    }
+  }, [pdfPreview])
+
+  const FIELD_ORDER = ['datetime', 'dept', 'author', 'attendees', 'agenda_items', 'discussion_content', 'decisions', 'action_items', 'special_notes']
+  const editableFieldKeys: string[] = pdfPreview
+    ? FIELD_ORDER.filter(k => k in pdfPreview.field_values).concat(
+        Object.keys(pdfPreview.field_values).filter((k) => {
+          if (FIELD_ORDER.includes(k)) return false
+          if (
+            k === 'department_author' &&
+            ('dept' in pdfPreview.field_values || 'author' in pdfPreview.field_values)
+          ) {
+            return false
+          }
+          return true
+        })
+      )
+    : []
+
+  const uniformRows = Math.max(
+    1,
+    Math.min(8, (editValues.discussion_content ?? '').split('\n').length),
+  )
+  const metaFields = new Set(['datetime', 'dept', 'author', 'attendees'])
+
+  function handleApply() {
+    onRefresh(editValues)
+    setIsDirty(false)
+  }
+
+  return (
+    <div className="rounded-xl border border-border bg-card overflow-hidden">
+      {/* 헤더 */}
+      <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between px-4 py-3 border-b border-border bg-muted/30">
+        <div className="flex flex-col gap-0.5 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <FileText size={13} className="text-accent shrink-0" />
+            <span className="text-sm font-medium text-foreground">PDF 미리보기 · 직접 편집</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+          {pdfPreview && (
+            <div className="flex items-center h-7 rounded-md border border-border bg-background px-1 text-mini text-muted-foreground">
               <button
-                onClick={() => setExpanded(true)}
-                className="mt-2 text-mini text-accent hover:underline"
+                type="button"
+                title="축소"
+                disabled={zoomIdx <= 0}
+                onClick={() => setZoomIdx((i) => Math.max(0, i - 1))}
+                className="px-1.5 py-0.5 rounded hover:bg-muted disabled:opacity-30"
               >
-                전체 보기
+                −
+              </button>
+              <span className="tabular-nums px-1 min-w-[2.75rem] text-center text-foreground">
+                {Math.round(PDF_PREVIEW_ZOOM_LEVELS[zoomIdx] * 100)}%
+              </span>
+              <button
+                type="button"
+                title="확대"
+                disabled={zoomIdx >= PDF_PREVIEW_ZOOM_LEVELS.length - 1}
+                onClick={() => setZoomIdx((i) => Math.min(PDF_PREVIEW_ZOOM_LEVELS.length - 1, i + 1))}
+                className="px-1.5 py-0.5 rounded hover:bg-muted disabled:opacity-30"
+              >
+                +
               </button>
             </div>
           )}
+          {pdfPreview && (
+            <button
+              onClick={onDownload}
+              className="flex items-center gap-1 h-7 px-2.5 rounded border border-border text-mini hover:bg-muted transition-colors"
+            >
+              <Download size={11} /> PDF 다운로드
+            </button>
+          )}
+          {!pdfPreview && !loading && (
+            <button
+              onClick={onGeneratePreview}
+              className="flex items-center gap-1 h-7 px-2.5 rounded border border-accent/40 text-mini text-accent hover:bg-accent/10 transition-colors"
+            >
+              <Sparkles size={11} /> PDF 생성
+            </button>
+          )}
+          <button
+            onClick={onRegenerate}
+            disabled={generating}
+            className="flex items-center gap-1 h-7 px-2.5 rounded border border-border text-mini hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {generating
+              ? <><Loader2 size={11} className="animate-spin" /> 생성 중...</>
+              : <><RefreshCw size={11} /> 회의록 재생성</>}
+          </button>
+          {loading && (
+            <span className="flex items-center gap-1 text-mini text-muted-foreground">
+              <Loader2 size={11} className="animate-spin" /> 생성 중...
+            </span>
+          )}
         </div>
+      </div>
+
+      {/* 빈 상태 */}
+      {!pdfPreview && !loading && (
+        <div className="px-5 py-10 text-center">
+          <FileText size={32} className="mx-auto mb-3 text-muted-foreground/40" />
+          <p className="text-sm text-muted-foreground">회의록을 생성한 뒤 'PDF 생성' 버튼을 누르세요.</p>
+        </div>
+      )}
+      {loading && !pdfPreview && (
+        <div className="flex justify-center items-center py-16 gap-2 text-muted-foreground text-sm">
+          <Loader2 size={18} className="animate-spin" /> PDF 생성 중...
+        </div>
+      )}
+
+      {pdfPreview && (
+        <>
+          {/* PDF 이미지 + 인라인 편집 패널 — 배경은 용지 느낌 */}
+          <div className="p-3 sm:p-4 bg-stone-200/60 dark:bg-stone-950/50 flex justify-center overflow-auto">
+            {/* zoom: 이미지와 오버레이가 한 덩어리로 확대되어 좌표가 어긋나지 않음 (Firefox 미지원 시 100% 유지 권장) */}
+            <div
+              className="relative inline-block select-none origin-top"
+              style={{
+                zoom: PDF_PREVIEW_ZOOM_LEVELS[zoomIdx],
+              }}
+            >
+              <img
+                src={`data:image/png;base64,${pdfPreview.preview_b64}`}
+                alt="PDF 미리보기"
+                className="max-w-full rounded-sm shadow-md border border-stone-300/90 dark:border-stone-600 block bg-white"
+                draggable={false}
+              />
+
+              {editableFieldKeys.length > 0 && (
+                <button
+                  onClick={() => setShowEditPanel(p => !p)}
+                  className="absolute top-2 right-2 z-10 flex items-center gap-1 h-7 px-2.5 rounded-lg bg-background/90 border border-border text-xs font-medium shadow-sm hover:bg-background transition-colors"
+                >
+                  {showEditPanel ? <X size={10} /> : <Pencil size={10} />}
+                  {showEditPanel ? '닫기' : '편집'}
+                </button>
+              )}
+
+              {showEditPanel && editableFieldKeys.length > 0 && (
+                <div className="absolute top-0 right-0 w-56 h-full bg-background border-l border-border flex flex-col z-20 shadow-xl rounded-r overflow-hidden">
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0 bg-muted/30">
+                    <span className="text-xs font-semibold text-foreground">내용 편집</span>
+                    <button
+                      onClick={() => setShowEditPanel(false)}
+                      className="p-0.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto px-3 py-2.5 flex flex-col gap-3">
+                    {editableFieldKeys.map((fieldKey) => (
+                      <div key={fieldKey}>
+                        <label className="block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                          {FIELD_LABEL[fieldKey] ?? fieldKey}
+                        </label>
+                        <textarea
+                          value={editValues[fieldKey] ?? ''}
+                          onFocus={() => setFocusedKey(fieldKey)}
+                          onBlur={() => setFocusedKey(null)}
+                          onChange={e => {
+                            setEditValues(prev => ({ ...prev, [fieldKey]: e.target.value }))
+                            setIsDirty(true)
+                          }}
+                          rows={metaFields.has(fieldKey)
+                            ? Math.max(1, Math.min(5, (editValues[fieldKey] ?? '').split('\n').length))
+                            : uniformRows}
+                          className={clsx(
+                            'w-full px-2 py-1 text-[11px] rounded border bg-background text-foreground outline-none resize-none leading-relaxed transition-colors',
+                            focusedKey === fieldKey
+                              ? 'border-accent ring-1 ring-accent/20'
+                              : 'border-border',
+                          )}
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="px-3 py-2.5 border-t border-border shrink-0">
+                    <button
+                      onClick={handleApply}
+                      disabled={loading || !isDirty}
+                      className="w-full h-8 rounded-lg bg-accent text-accent-foreground text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-accent/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {loading
+                        ? <><Loader2 size={11} className="animate-spin" /> 생성 중...</>
+                        : <><RefreshCw size={11} /> 반영</>}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 수정 내용 반영 바 — 편집 패널이 닫혀있고 변경사항이 있을 때 */}
+          {isDirty && !showEditPanel && (
+            <div className="px-4 py-2.5 border-t border-border flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between bg-muted/20">
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                수정된 내용이 있습니다. 반영 버튼을 눌러 PDF를 업데이트하세요.
+              </p>
+              <button
+                onClick={handleApply}
+                disabled={loading}
+                className="flex items-center gap-1.5 h-8 px-4 rounded-lg bg-accent text-accent-foreground text-sm font-medium hover:bg-accent/90 transition-colors disabled:opacity-50 shrink-0"
+              >
+                {loading ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+                수정 내용 반영
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   )
 }
 
-// ── 보고서 탭 ─────────────────────────────────────────────────────────────────
-function ReportsTab({
-  meetingId, workspaceId, showToast,
-}: {
-  meetingId: string; workspaceId: number; showToast: (m: string, t?: 'success' | 'error') => void
-}) {
-  const [format, setFormat] = useState<Format>('markdown')
-  const [reports, setReports] = useState<ReportItem[]>([])
-  const [loading, setLoading] = useState(true)
-  const [generating, setGenerating] = useState(false)
-  const [downloading, setDownloading] = useState<number | null>(null)
-
-  async function load() {
-    try {
-      const data = await getReports(meetingId, workspaceId)
-      setReports(data)
-    } catch {
-      setReports([])
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => { load() }, [meetingId])
-
-  async function handleGenerate() {
-    setGenerating(true)
-    const prevCount = reports.length
-    try {
-      await generateReport(meetingId, workspaceId, format)
-      const ok = await pollUntil(async () => {
-        const data = await getReports(meetingId, workspaceId).catch(() => null)
-        if (data && data.length > prevCount) { setReports(data); return true }
-        return false
-      })
-      if (ok) {
-        showToast(`${FORMAT_OPTIONS.find((o) => o.id === format)?.label} 보고서가 생성되었습니다.`)
-      } else {
-        showToast('보고서 생성에 실패했습니다. 회의록이 먼저 생성되어야 합니다.', 'error')
-      }
-    } catch {
-      showToast('보고서 생성에 실패했습니다.', 'error')
-    } finally {
-      setGenerating(false)
-    }
-  }
-
-  async function handleDownload(report: ReportItem) {
-    setDownloading(report.id)
-    try {
-      const ext = FORMAT_EXT[report.format as Format] ?? 'txt'
-      await downloadReport(meetingId, report.id, workspaceId, `${report.title}.${ext}`)
-    } catch {
-      showToast('다운로드에 실패했습니다.', 'error')
-    } finally {
-      setDownloading(null)
-    }
-  }
-
-  const hasFormat = (fmt: Format) => reports.some((r) => r.format === fmt)
-
-  return (
-    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6 space-y-4">
-      {/* 포맷 선택 */}
-      <div>
-        <p className="text-mini font-medium text-muted-foreground uppercase tracking-wide mb-2">포맷 선택</p>
-        <div className="grid grid-cols-4 gap-2">
-          {FORMAT_OPTIONS.map((opt) => (
-            <button
-              key={opt.id}
-              onClick={() => setFormat(opt.id)}
-              className={clsx(
-                'relative flex flex-col items-center gap-1.5 p-3 rounded-xl border text-sm transition-all',
-                format === opt.id
-                  ? 'border-accent bg-accent/10 text-accent shadow-sm'
-                  : 'border-border text-muted-foreground hover:border-foreground/40 hover:bg-muted/30',
-              )}
-            >
-              {hasFormat(opt.id) && (
-                <span className="absolute top-1.5 right-1.5">
-                  <Check size={10} className="text-green-500" />
-                </span>
-              )}
-              {opt.icon}
-              <span className="font-medium">{opt.label}</span>
-              <span className="text-micro text-center leading-tight">{opt.desc}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* 생성 버튼 */}
-      <button
-        onClick={handleGenerate}
-        disabled={generating}
-        className="w-full h-11 rounded-xl bg-accent text-accent-foreground text-sm font-medium hover:bg-accent/90 transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
-      >
-        {generating
-          ? <><Loader2 size={14} className="animate-spin" /> 생성 중...</>
-          : <><Sparkles size={14} /> {FORMAT_OPTIONS.find((o) => o.id === format)?.label} 보고서 생성</>
-        }
-      </button>
-
-      {/* 생성된 보고서 목록 */}
-      <div>
-        <p className="text-mini font-medium text-muted-foreground uppercase tracking-wide mb-2">생성된 보고서</p>
-        {loading ? (
-          <div className="flex justify-center py-8">
-            <Loader2 size={16} className="animate-spin text-muted-foreground" />
-          </div>
-        ) : reports.length > 0 ? (
-          <div className="flex flex-col gap-2">
-            {reports.map((report) => (
-              <div
-                key={report.id}
-                className="flex items-center gap-3 px-4 py-3 rounded-xl border border-border bg-card"
-              >
-                <span className={clsx(
-                  "text-micro font-bold px-1.5 py-0.5 rounded-md uppercase shrink-0",
-                  report.format === 'markdown' && 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
-                  report.format === 'html' && 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-                  report.format === 'wbs' && 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-                  report.format === 'excel' && 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                )}>
-                  {report.format}
-                </span>
-                <span className="flex-1 text-sm text-foreground truncate">{report.title}</span>
-                <span className="text-mini text-muted-foreground shrink-0">
-                  {new Date(report.updated_at).toLocaleDateString('ko-KR')}
-                </span>
-                <button
-                  onClick={() => handleDownload(report)}
-                  disabled={downloading === report.id}
-                  className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg border border-border text-mini hover:bg-muted transition-colors disabled:opacity-50 shrink-0"
-                >
-                  {downloading === report.id
-                    ? <Loader2 size={11} className="animate-spin" />
-                    : <Download size={11} />
-                  }
-                  다운로드
-                </button>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="flex flex-col items-center justify-center py-10 gap-2 rounded-xl border border-dashed border-border">
-            <FileBarChart2 size={24} className="text-muted-foreground/40" />
-            <p className="text-sm text-muted-foreground">포맷을 선택하고 보고서를 생성하세요.</p>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ── 내보내기 탭 ───────────────────────────────────────────────────────────────
+// ── 내보내기 탭 ───────────────────────────────────────────────────────
 function ExportTab({
   meetingId, workspaceId, isAdmin, showToast,
 }: {
-  meetingId: string; workspaceId: number; isAdmin: boolean; showToast: (m: string, t?: 'success' | 'error') => void
+  meetingId: string
+  workspaceId: number
+  isAdmin: boolean
+  showToast: (m: string, t?: 'success' | 'error') => void
 }) {
   const navigate = useNavigate()
   const [integrations, setIntegrations] = useState<{ service: ServiceName; is_connected: boolean }[]>([])
   const [exporting, setExporting] = useState<Record<string, boolean>>({})
   const [exported, setExported] = useState<Record<string, boolean>>({})
-  const [suggesting, setSuggesting]           = useState(false)
-  const [slots, setSlots]                     = useState<TimeSlot[]>([])
-  const [selectedSlot, setSelectedSlot]       = useState<TimeSlot | null>(null)
-  const [titleInput, setTitleInput]           = useState('다음 회의')
-  const [registering, setRegistering]         = useState(false)
+  const [suggesting, setSuggesting] = useState(false)
+  const [slots, setSlots] = useState<TimeSlot[]>([])
+  const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
+  const [titleInput, setTitleInput] = useState('다음 회의')
+  const [registering, setRegistering] = useState(false)
   const [registeredEvent, setRegisteredEvent] = useState<{ event_id: string; scheduled_at: string } | null>(null)
 
   useEffect(() => {
@@ -461,7 +541,7 @@ function ExportTab({
     setExporting((p) => ({ ...p, [serviceId]: true }))
     try {
       if (serviceId === 'slack') {
-        await exportSlack(meetingId, workspaceId, { include_action_items: true, include_reports: true })
+        await exportSlack(meetingId, workspaceId, { include_action_items: true })
       } else if (serviceId === 'google-calendar') {
         await exportGoogleCalendar(meetingId, workspaceId)
       }
@@ -481,6 +561,7 @@ function ExportTab({
       setExporting((p) => ({ ...p, [serviceId]: false }))
     }
   }
+
   async function handleSuggest() {
     if (!isConnected('google_calendar')) {
       if (confirm('Google Calendar 연동이 필요합니다. 설정 페이지로 이동하시겠습니까?')) {
@@ -488,9 +569,12 @@ function ExportTab({
       }
       return
     }
-    setSuggesting(true); setSlots([]); setSelectedSlot(null); setRegisteredEvent(null)
+    setSuggesting(true)
+    setSlots([])
+    setSelectedSlot(null)
+    setRegisteredEvent(null)
     try {
-      const res = await suggestNextMeeting(meetingId!, workspaceId)
+      const res = await suggestNextMeeting(meetingId, workspaceId)
       setSlots(res.slots)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : ''
@@ -504,15 +588,12 @@ function ExportTab({
     if (!selectedSlot) return
     setRegistering(true)
     try {
-      const res = await registerNextMeeting(meetingId!, workspaceId, {
+      const res = await registerNextMeeting(meetingId, workspaceId, {
         title: titleInput,
         scheduled_at: selectedSlot.start,
         participant_ids: [],
       })
-      setRegisteredEvent({ 
-        event_id: res.event_id, 
-        scheduled_at: selectedSlot.start 
-      })
+      setRegisteredEvent({ event_id: res.event_id, scheduled_at: selectedSlot.start })
       setSlots([])
       setSelectedSlot(null)
       showToast('구글 캘린더에 일정이 등록되었습니다.')
@@ -527,7 +608,7 @@ function ExportTab({
     if (!registeredEvent) return
     if (!confirm('등록된 일정을 삭제하시겠습니까?')) return
     try {
-      await deleteNextMeeting(meetingId!, workspaceId, registeredEvent.event_id)
+      await deleteNextMeeting(meetingId, workspaceId, registeredEvent.event_id)
       setRegisteredEvent(null)
       showToast('일정이 삭제되었습니다.')
     } catch {

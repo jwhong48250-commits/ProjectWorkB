@@ -74,6 +74,25 @@ export async function endWorkspaceMeeting(workspaceId: number, meetingId: number
   await apiRequest(`/meetings/workspaces/${workspaceId}/${meetingId}/end`, { method: 'POST' })
 }
 
+export interface SimulateWavResult {
+  status: string
+  meeting_id: number
+  utterance_count: number
+}
+
+export async function simulateWav(
+  workspaceId: number,
+  meetingId: number,
+  file: File,
+): Promise<SimulateWavResult> {
+  const form = new FormData()
+  form.append('file', file)
+  return apiRequest<SimulateWavResult>(
+    `/meetings/workspaces/${workspaceId}/${meetingId}/simulate-wav`,
+    { method: 'POST', body: form },
+  )
+}
+
 export interface MinutePhoto {
   id: number
   minute_id: number
@@ -117,6 +136,23 @@ export interface MeetingHistoryResult {
   total: number
   page: number
   meetings: MeetingHistoryItem[]
+}
+
+export async function fetchScheduledMeetings(
+  workspaceId: number,
+  page = 1,
+  size = 20,
+  keyword = '',
+): Promise<MeetingHistoryResult> {
+  const params = new URLSearchParams({ page: String(page), size: String(size) })
+  if (keyword) params.append('keyword', keyword)
+  const data = await apiRequest<MeetingHistoryResult>(
+    `/meetings/workspaces/${workspaceId}/history?${params}`,
+  )
+  return {
+    ...data,
+    meetings: data.meetings.filter((m) => m.status === 'scheduled' || m.status === 'in_progress'),
+  }
 }
 
 export async function fetchDoneMeetings(
