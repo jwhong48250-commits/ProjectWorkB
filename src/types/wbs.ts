@@ -5,7 +5,7 @@ export interface WbsTask {
   id: string
   epicId?: string
   title: string
-  description?: string
+  content?: string
   assigneeId?: string
   assigneeName?: string
   priority: WbsPriority

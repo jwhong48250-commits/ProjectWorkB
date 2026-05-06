@@ -104,8 +104,16 @@ export function disconnectIntegration(workspaceId: number, service: ServiceName)
   )
 }
 
+export type HealthStatus = 'loading' | 'ok' | 'expired' | 'revoked' | 'disconnected' | 'error'
+
+export interface TestIntegrationResult {
+  success: boolean
+  status: HealthStatus
+  message: string
+}
+
 export function testIntegration(workspaceId: number, service: ServiceName) {
-  return apiFetch<{ success: boolean; message: string }>(
+  return apiFetch<TestIntegrationResult>(
     `/integrations/workspaces/${workspaceId}/${service}/test`,
     { method: 'POST' }
   )
