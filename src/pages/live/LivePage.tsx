@@ -50,14 +50,15 @@ function speakerMeta(speaker: string | number): {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-type PanelItem = {
-    id: string;
-    speakerColor: string;
-    speakerName: string;
-    text: string;
-};
-
 const AUTO_SCROLL_THRESHOLD_PX = 64;
+const LEAVE_WARNING_MESSAGE =
+  "회의가 진행 중입니다. 이 페이지를 벗어나면 실시간 화면을 다시 열어야 합니다. 이동하시겠습니까?";
+
+type BrowserHistoryState = Record<string, unknown> & {
+  idx?: number;
+  key?: string;
+  __livePageLeaveGuard?: string;
+};
 
 export default function LivePage() {
     const { meetingId = "2" } = useParams();
@@ -88,9 +89,8 @@ export default function LivePage() {
     // Aux panel (search / screen / speakers) — null = closed
     const [auxPanel, setAuxPanel] = useState<AuxPanel>(null);
     const [isEndingMeeting, setIsEndingMeeting] = useState(false);
+    const skipLeaveWarningRef = useRef(false);
 
-    const decisions: PanelItem[] = [];
-    const actions: PanelItem[] = [];
     const displaySegments = diarization;
     const showEndingModal = isEndingMeeting && wsStatus !== "error";
 
@@ -99,12 +99,163 @@ export default function LivePage() {
     const scrollBottomRef = useRef<HTMLDivElement>(null);
     const shouldAutoScrollRef = useRef(true);
 
-    function updateAutoScrollState() {
+  function navigateToMeetingNotes() {
+    skipLeaveWarningRef.current = true;
+    navigate(`/meetings/${meetingId}/notes`);
+  }
+
+  function confirmLeavePage() {
+    if (skipLeaveWarningRef.current) {
+      return true;
+    }
+
+    return window.confirm(LEAVE_WARNING_MESSAGE);
+  }
+
+  function pushLeaveGuardState() {
+    const currentState =
+      window.history.state && typeof window.history.state === "object"
+        ? (window.history.state as BrowserHistoryState)
+        : ({} as BrowserHistoryState);
+
+    if (currentState.__livePageLeaveGuard === meetingId) {
+      return;
+    }
+
+    window.history.pushState(
+      {
+        ...currentState,
+        idx:
+          typeof currentState.idx === "number"
+            ? currentState.idx + 1
+            : currentState.idx,
+        key:
+          typeof currentState.key === "string"
+            ? `${currentState.key}-leave-guard-${Date.now()}`
+            : `live-leave-guard-${meetingId}-${Date.now()}`,
+        __livePageLeaveGuard: meetingId,
+      },
+      "",
+      window.location.href,
+    );
+  }
+
+  function updateAutoScrollState() {
         const container = scrollContainerRef.current;
         if (!container) return;
 
         const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
         shouldAutoScrollRef.current = distanceFromBottom <= AUTO_SCROLL_THRESHOLD_PX;
+
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (skipLeaveWarningRef.current) {
+        return;
+      }
+
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      if (skipLeaveWarningRef.current) {
+        return;
+      }
+
+      if (!confirmLeavePage()) {
+        pushLeaveGuardState();
+        return;
+      }
+
+      skipLeaveWarningRef.current = true;
+      window.history.back();
+    };
+
+    pushLeaveGuardState();
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [meetingId]);
+
+  useEffect(() => {
+    const handleDocumentClick = (event: MouseEvent) => {
+      if (skipLeaveWarningRef.current) {
+        return;
+      }
+
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.shiftKey
+      ) {
+        return;
+      }
+
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+
+      const anchor = target.closest("a");
+      if (!(anchor instanceof HTMLAnchorElement)) {
+        return;
+      }
+
+      if (
+        !anchor.href ||
+        anchor.target === "_blank" ||
+        anchor.hasAttribute("download")
+      ) {
+        return;
+      }
+
+      const nextUrl = new URL(anchor.href, window.location.href);
+      if (nextUrl.origin !== window.location.origin) {
+        return;
+      }
+
+      const currentRouteKey = `${window.location.pathname}${window.location.search}`;
+      const nextRouteKey = `${nextUrl.pathname}${nextUrl.search}`;
+      if (currentRouteKey === nextRouteKey) {
+        return;
+      }
+
+      if (!confirmLeavePage()) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        return;
+      }
+
+      skipLeaveWarningRef.current = true;
+      window.requestAnimationFrame(() => {
+        const latestRouteKey = `${window.location.pathname}${window.location.search}`;
+        if (latestRouteKey === currentRouteKey) {
+          skipLeaveWarningRef.current = false;
+        }
+      });
+    };
+
+    document.addEventListener("click", handleDocumentClick, true);
+
+    return () => {
+      document.removeEventListener("click", handleDocumentClick, true);
+    };
+  }, []);
     }
 
     useEffect(() => {
@@ -230,68 +381,6 @@ export default function LivePage() {
             stopCamera();
         };
     }, [camOn]);
-
-    // ── Panel content renderers ──────────────────────────────────────────
-    function renderMainPanelContent() {
-        if (mainPanel === "decisions") {
-            return (
-                <div className="flex flex-col gap-2">
-                    <p className="text-mini font-medium text-muted-foreground uppercase tracking-wide mb-1">
-                        실시간 감지된 결정사항
-                    </p>
-                    {decisions.map((d) => (
-                        <div
-                            key={d.id}
-                            className="p-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800"
-                        >
-                            <div className="flex items-center gap-1.5 mb-1">
-                                <span
-                                    className="w-4 h-4 rounded-full flex items-center justify-center text-white text-micro font-bold"
-                                    style={{ backgroundColor: d.speakerColor }}
-                                >
-                                    {d.speakerName[0]}
-                                </span>
-                                <span className="text-mini font-medium text-foreground">{d.speakerName}</span>
-                            </div>
-                            <p className="text-mini text-foreground">{d.text}</p>
-                        </div>
-                    ))}
-                    {decisions.length === 0 && (
-                        <p className="text-mini text-muted-foreground">아직 감지된 결정사항이 없습니다.</p>
-                    )}
-                </div>
-            );
-        }
-        if (mainPanel === "actions") {
-            return (
-                <div className="flex flex-col gap-2">
-                    <p className="text-mini font-medium text-muted-foreground uppercase tracking-wide mb-1">
-                        실시간 감지된 액션아이템
-                    </p>
-                    {actions.map((a) => (
-                        <div
-                            key={a.id}
-                            className="p-2.5 rounded-lg bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800"
-                        >
-                            <div className="flex items-center gap-1.5 mb-1">
-                                <span
-                                    className="w-4 h-4 rounded-full flex items-center justify-center text-white text-micro font-bold"
-                                    style={{ backgroundColor: a.speakerColor }}
-                                >
-                                    {a.speakerName[0]}
-                                </span>
-                                <span className="text-mini font-medium text-foreground">{a.speakerName}</span>
-                            </div>
-                            <p className="text-mini text-foreground">{a.text}</p>
-                        </div>
-                    ))}
-                    {actions.length === 0 && (
-                        <p className="text-mini text-muted-foreground">아직 감지된 액션아이템이 없습니다.</p>
-                    )}
-                </div>
-            );
-        }
-    }
 
     function renderAuxPanelContent() {
         if (auxPanel === "screen") {
@@ -450,7 +539,7 @@ export default function LivePage() {
                         </button>
                         {wsStatus === "done" ? (
                             <button
-                                onClick={() => navigate(`/meetings/${meetingId}/notes`)}
+                                onClick={navigateToMeetingNotes}
                                 className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-green-600 text-white text-mini font-medium hover:bg-green-700 transition-colors"
                             >
                                 <CheckCircle size={12} /> 회의록 보기
@@ -562,7 +651,7 @@ export default function LivePage() {
                                     </p>
                                 </div>
                                 <button
-                                    onClick={() => navigate(`/meetings/${meetingId}/notes`)}
+                                    onClick={navigateToMeetingNotes}
                                     className="shrink-0 flex items-center gap-1 h-7 px-3 rounded bg-green-600 text-white text-mini font-medium hover:bg-green-700 transition-colors"
                                 >
                                     회의록 보기
@@ -675,11 +764,6 @@ export default function LivePage() {
                             <div ref={scrollBottomRef} />
                         </div>
                     </div>
-
-                    {/* Mobile: main panel content */}
-                    <div className="lg:hidden border-t border-border bg-card px-3 py-3 mt-4">
-                        {renderMainPanelContent()}
-                    </div>
                 </div>
             </div>
 
@@ -716,7 +800,6 @@ export default function LivePage() {
                         </button>
                     ))}
                 </div>
-                <div className="flex-1 overflow-y-auto p-3">{renderMainPanelContent()}</div>
             </aside>
 
             {showEndingModal && (
