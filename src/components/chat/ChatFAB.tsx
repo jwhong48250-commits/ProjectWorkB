@@ -159,6 +159,7 @@ export default function ChatFAB() {
           role: m.role,
           content: m.content,
           timestamp: m.timestamp,
+          function_type: m.function_type,
         })),
       )
     })
@@ -203,9 +204,7 @@ export default function ChatFAB() {
         {
           id: `a-${Date.now()}`,
           role: 'assistant',
-          content: pastMeetings.length === 0
-            ? '아직 완료된 회의가 없습니다.'
-            : res.answer,
+          content: res.answer,
           timestamp: res.timestamp,
           sources: res.result?.sources ?? [],
           function_type: res.function_type,
@@ -328,7 +327,7 @@ export default function ChatFAB() {
       >
         {open
           ? <X size={22} className="text-accent-foreground" />
-          : <WorkbAssistantAvatar size={34} />
+          : <img src="/brand/chatbot.png" alt="AI 도우미" className="w-9 h-9 object-contain" />
         }
       </button>
 
@@ -435,15 +434,15 @@ export default function ChatFAB() {
                   )}
                   {msg.role === 'assistant' &&
                     <div>
-                      {msg.function_type === 'quick_report' && meetingId && (                                            
+                      {msg.function_type === 'quick_report' && meetingId && (
                           <a
                             href={`/meetings/${meetingId}/reports?tab=minutes`}
-                            className="mt-2 flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border text-mini hover:bg-muted transition-colors w-fit"
-                          > 
-                            <FileText size={12} /> 회의록 페이지에서 생성하기
+                            className="mt-2 flex items-center gap-1.5 h-8 px-3 rounded-lg bg-accent text-accent-foreground text-mini font-medium hover:bg-accent/90 transition-colors w-fit"
+                          >
+                            <FileText size={12} /> 회의록에서 보기
                           </a>
-                        )}                        
-                        {msg.function_type === 'report_guide' && meetingId && (                                            
+                        )}
+                        {msg.function_type === 'report_guide' && meetingId && (
                           <a
                             href={`/meetings/${meetingId}/reports?tab=minutes`}
                             className="mt-2 flex items-center gap-1.5 h-8 px-3 rounded-lg bg-accent text-accent-foreground text-mini font-medium hover:bg-accent/90 transition-colors w-fit"

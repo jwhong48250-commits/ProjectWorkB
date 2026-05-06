@@ -5,7 +5,7 @@ export interface SendMessageResponse {
     session_id: string
     function_type: string
     answer: string
-    result: { sources?: WebSource[] }
+    result: { sources?: WebSource[]; action_button?: string | null }
     timestamp: string
 }
 
