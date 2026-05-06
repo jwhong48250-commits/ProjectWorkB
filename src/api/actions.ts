@@ -237,12 +237,15 @@ export function getMinutesPdfPreview(
   meetingId: string | number,
   workspaceId: number,
   fieldValues?: Record<string, string>,
+  renderMode: 'html' | 'overlay' = 'html',
 ) {
+  const bodyObj: Record<string, unknown> = { render_mode: renderMode }
+  if (fieldValues) bodyObj.field_values = fieldValues
   return apiFetch<MinutesPdfPreview>(
     `/actions/meetings/${meetingId}/minutes/pdf-preview?workspace_id=${workspaceId}`,
     {
       method: 'POST',
-      body: fieldValues ? JSON.stringify({ field_values: fieldValues }) : undefined,
+      body: JSON.stringify(bodyObj),
     },
   )
 }
