@@ -3,6 +3,10 @@ import { Link } from 'react-router-dom'
 import { Users } from 'lucide-react'
 import { getWorkspaceMembers, type UserRole, type WorkspaceMember } from '../../api/workspace'
 import { useProfileImage } from '../../utils/profileImage'
+import {
+  getCurrentWorkspaceRole,
+  WORKSPACE_ROLE_CHANGED_EVENT,
+} from '../../utils/workspace'
 
 const AVATAR_COLORS = ['#6b78f6', '#22c55e', '#f97316', '#ec4899', '#eab308', '#14b8a6', '#8b5cf6']
 
@@ -64,6 +68,20 @@ export default function WorkspaceMembersAside({ workspaceId }: { workspaceId: nu
   const [members, setMembers] = useState<WorkspaceMember[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [workspaceRole, setWorkspaceRole] = useState(() => getCurrentWorkspaceRole())
+
+  useEffect(() => {
+    setWorkspaceRole(getCurrentWorkspaceRole())
+  }, [workspaceId])
+
+  useEffect(() => {
+    function onRoleChanged(e: Event) {
+      const role = (e as CustomEvent<{ role: string }>).detail?.role
+      if (typeof role === 'string') setWorkspaceRole(role)
+    }
+    window.addEventListener(WORKSPACE_ROLE_CHANGED_EVENT, onRoleChanged)
+    return () => window.removeEventListener(WORKSPACE_ROLE_CHANGED_EVENT, onRoleChanged)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -99,12 +117,14 @@ export default function WorkspaceMembersAside({ workspaceId }: { workspaceId: nu
             <span className="text-mini text-muted-foreground shrink-0">{sorted.length}</span>
           )}
         </div>
-        <Link
-          to="/settings/members"
-          className="text-mini text-accent hover:underline shrink-0"
-        >
-          관리
-        </Link>
+        {workspaceRole === 'admin' && (
+          <Link
+            to="/settings/members"
+            className="text-mini text-accent hover:underline shrink-0"
+          >
+            관리
+          </Link>
+        )}
       </div>
 
       {error && (

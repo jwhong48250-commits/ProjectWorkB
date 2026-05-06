@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Search, User, ChevronDown, Clock } from 'lucide-react'
+import { Search, User, ChevronDown, Clock, X } from 'lucide-react'
 import clsx from 'clsx'
 import Badge from '../components/ui/Badge'
 import { formatDateFull, durationMinutes } from '../utils/format'
@@ -9,6 +9,7 @@ import { getCurrentWorkspaceId, WORKSPACE_CHANGED_EVENT } from '../utils/workspa
 import type { Meeting, Participant } from '../types/meeting'
 import { apiRequest } from '../api/client'
 import { fetchWorkspaceMembers } from '../api/workspaceMembers'
+import DatePicker from '../components/ui/DatePicker'
 
 type BackendStatus = 'scheduled' | 'in_progress' | 'done'
 type UiStatus = 'upcoming' | 'inprogress' | 'completed'
@@ -78,6 +79,12 @@ function historyParticipantsToAvatars(rows: MeetingHistoryParticipant[] | undefi
   })
 }
 
+function isYmd(s: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false
+  const t = Date.parse(`${s}T12:00:00`)
+  return !Number.isNaN(t)
+}
+
 function historyItemToMeeting(m: MeetingHistoryItem): Meeting {
   return {
     id: String(m.id),
@@ -99,8 +106,11 @@ export default function HistoryPage() {
   const [searchParams, setSearchParams] = useSearchParams()
 
   const initialKeyword = (searchParams.get('keyword') ?? '').trim()
+  const initialDateRaw = (searchParams.get('date') ?? '').trim()
+  const initialDate = isYmd(initialDateRaw) ? initialDateRaw : ''
 
   const [searchKeyword, setSearchKeyword] = useState(initialKeyword)
+  const [filterDate, setFilterDate] = useState(initialDate)
   const [participantFilter, setParticipantFilter] = useState<string | null>(null)
   const [workspaceMembers, setWorkspaceMembers] = useState<
     { user_id: number; name: string }[]
@@ -112,10 +122,14 @@ export default function HistoryPage() {
   const [error, setError] = useState<string | null>(null)
   const [workspaceId, setWorkspaceId] = useState(() => getCurrentWorkspaceId())
 
-  // Keep state in sync when user lands via TopBar (/history?keyword=...)
+  // Keep state in sync when user lands via TopBar (/history?keyword=...&date=...)
   useEffect(() => {
     setSearchKeyword(initialKeyword)
   }, [initialKeyword])
+
+  useEffect(() => {
+    setFilterDate(initialDate)
+  }, [initialDate])
 
   useEffect(() => {
     function onWsChanged(e: Event) {
@@ -157,6 +171,7 @@ export default function HistoryPage() {
       if (keyword) qs.set('keyword', keyword)
       const pid = participantFilter ? Number(participantFilter) : NaN
       if (Number.isFinite(pid) && pid > 0) qs.set('participant_user_id', String(pid))
+      if (filterDate && isYmd(filterDate)) qs.set('date', filterDate)
       qs.set('page', '1')
       qs.set('size', '20')
 
@@ -184,7 +199,7 @@ export default function HistoryPage() {
       clearTimeout(handle)
       controller.abort()
     }
-  }, [searchKeyword, workspaceId, participantFilter])
+  }, [searchKeyword, workspaceId, participantFilter, filterDate])
 
   const filtered = useMemo(() => meetingsHistory, [meetingsHistory])
 
@@ -195,7 +210,7 @@ export default function HistoryPage() {
       <div className="mb-5">
         <h1 className="text-xl font-semibold text-foreground">회의 히스토리</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
-          키워드, 참석자 기준으로 이전 회의를 검색할 수 있습니다.
+          키워드, 참석자, 일자 기준으로 이전 회의를 검색할 수 있습니다.
         </p>
       </div>
 
@@ -244,10 +259,35 @@ export default function HistoryPage() {
           <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
         </div>
 
-        {/* Result count */}
-        <span className="text-sm text-muted-foreground ml-auto">
-          {loading ? '불러오는 중...' : `${total}개 회의`}
-        </span>
+        <div className="flex items-center gap-1 shrink-0">
+          <DatePicker
+            value={filterDate}
+            onChange={(next) => {
+              setFilterDate(next)
+              const params = new URLSearchParams(searchParams)
+              if (next && isYmd(next)) params.set('date', next)
+              else params.delete('date')
+              setSearchParams(params, { replace: true })
+            }}
+            placeholder="일자 선택"
+            className="w-[11rem] min-w-0 [&_button]:h-8 [&_button]:px-2 [&_button]:text-xs [&_button]:rounded-md"
+          />
+          {filterDate ? (
+            <button
+              type="button"
+              onClick={() => {
+                setFilterDate('')
+                const params = new URLSearchParams(searchParams)
+                params.delete('date')
+                setSearchParams(params, { replace: true })
+              }}
+              className="h-8 w-8 shrink-0 flex items-center justify-center rounded-md border border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              aria-label="일자 필터 해제"
+            >
+              <X size={14} />
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {/* Meeting list */}
@@ -265,9 +305,11 @@ export default function HistoryPage() {
       ) : (
         <div className="flex flex-col divide-y divide-border border border-border rounded-lg overflow-hidden bg-card">
           {/* Table header */}
-          <div className="hidden md:grid grid-cols-[1fr_auto] gap-4 px-4 py-2 bg-muted/60 text-micro font-medium text-muted-foreground uppercase tracking-wide border-b border-border">
-            <span>회의</span>
-            <span className="text-right">일시</span>
+          <div className="hidden md:grid grid-cols-[1fr_auto] gap-4 px-4 py-2 bg-muted/60 font-medium text-muted-foreground uppercase tracking-wide border-b border-border">
+            <span className="text-sm">회의 리스트</span>
+            <span className="text-micro text-muted-foreground ml-auto self-end">
+              {loading ? '불러오는 중...' : `${total}개 회의`}
+            </span>
           </div>
 
           {filtered.map((meeting) => (
