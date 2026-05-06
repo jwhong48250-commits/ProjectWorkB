@@ -7,14 +7,17 @@ import {
   getWorkspaceMembers,
   issueInviteCode,
   updateMemberDepartment,
+  updateMemberProfile,
   updateMemberRole,
   type Department,
   type UserRole,
   type WorkspaceMember,
 } from '../../api/workspace'
 import { useProfileImage } from '../../utils/profileImage'
+import BirthDateSelect from '../../components/auth/BirthDateSelect'
 
 type Role = '관리자' | '멤버' | '뷰어'
+type Gender = 'male' | 'female'
 
 const ROLE_STYLES: Record<Role, string> = {
   관리자: 'bg-accent-subtle text-accent',
@@ -35,6 +38,11 @@ const BACKEND_TO_ROLE: Record<UserRole, Role> = {
 }
 
 const AVATAR_COLORS = ['#6b78f6', '#22c55e', '#f97316', '#ec4899', '#eab308', '#14b8a6']
+const GENDER_OPTIONS: { value: Gender; label: string }[] = [
+  { value: 'female', label: '여성' },
+  { value: 'male', label: '남성' },
+]
+const DESKTOP_MEMBER_GRID = 'md:grid-cols-[minmax(14rem,1fr)_6rem_8.5rem_12rem_4rem_6rem_6rem] md:min-w-[60rem]'
 
 function getAvatarColor(userId: number): string {
   return AVATAR_COLORS[userId % AVATAR_COLORS.length]
@@ -42,6 +50,14 @@ function getAvatarColor(userId: number): string {
 
 function getInitial(name: string): string {
   return name.trim().charAt(0) || '?'
+}
+
+function formatAge(age: number | null): string {
+  return age === null ? '-' : `${age}세`
+}
+
+function genderLabel(gender: WorkspaceMember['gender']): string {
+  return GENDER_OPTIONS.find((option) => option.value === gender)?.label ?? '-'
 }
 
 function MemberAvatar({ member, className }: { member: WorkspaceMember; className?: string }) {
@@ -142,6 +158,36 @@ export default function MembersSettingsPage() {
     }
   }
 
+  async function changeMemberProfile(
+    userId: number,
+    patch: Partial<Pick<WorkspaceMember, 'birth_date' | 'gender'>>,
+  ) {
+    const member = members.find((item) => item.user_id === userId)
+    if (!member) return
+    setError('')
+
+    const nextBirthDate = Object.prototype.hasOwnProperty.call(patch, 'birth_date')
+      ? patch.birth_date ?? null
+      : member.birth_date
+    const nextGender = Object.prototype.hasOwnProperty.call(patch, 'gender')
+      ? patch.gender ?? null
+      : member.gender
+
+    try {
+      const updated = await updateMemberProfile(workspaceId, userId, {
+        birth_date: nextBirthDate,
+        gender: nextGender,
+      })
+      setMembers((prev) => prev.map((m) => (
+        m.user_id === userId
+          ? { ...m, birth_date: updated.birth_date, age: updated.age, gender: updated.gender }
+          : m
+      )))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '멤버 정보 변경에 실패했습니다.')
+    }
+  }
+
   async function handleIssueInviteCode() {
     setIssuingInvite(true)
     setError('')
@@ -158,14 +204,14 @@ export default function MembersSettingsPage() {
 
   if (loading) {
     return (
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
         <p className="text-sm text-muted-foreground">멤버 정보를 불러오는 중입니다...</p>
       </div>
     )
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-semibold text-foreground">멤버 · 권한 관리</h1>
@@ -206,44 +252,75 @@ export default function MembersSettingsPage() {
       </div>
 
       {/* Member table */}
-      <div className="rounded-lg border border-border overflow-hidden bg-card">
+      <div className="rounded-lg border border-border overflow-x-auto bg-card">
         {/* Table header — desktop only */}
-        <div className="hidden md:grid grid-cols-[1fr_auto_auto_auto_auto] gap-3 px-4 py-2 bg-muted/40 border-b border-border text-micro font-medium text-muted-foreground uppercase tracking-wide">
+        <div className={`hidden md:grid ${DESKTOP_MEMBER_GRID} gap-3 px-4 py-2 bg-muted/40 border-b border-border text-center text-micro font-medium text-muted-foreground uppercase tracking-wide`}>
           <span>멤버</span>
           <span>역할</span>
           <span>부서</span>
-          <span>가입일</span>
-          <span></span>
+          <span>생년월일</span>
+          <span>나이</span>
+          <span>성별</span>
+          <span>권한</span>
         </div>
         {members.map((member) => (
-          <div key={member.user_id} className="px-4 py-3 border-b border-border last:border-0 hover:bg-muted/20 transition-colors">
+          <div key={member.user_id} className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors">
             {/* Mobile layout */}
-            <div className="flex items-center justify-between gap-2 md:hidden">
+            <div className="flex items-center justify-between gap-2 px-4 pt-3 md:hidden">
               <div className="flex items-center gap-2.5 min-w-0">
                 <MemberAvatar member={member} />
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-foreground truncate">{member.name}</p>
                   <p className="text-mini text-muted-foreground truncate">{member.email}</p>
-                  <p className="text-micro text-muted-foreground truncate">{member.department ?? '부서 없음'}</p>
+                  <p className="text-micro text-muted-foreground truncate">
+                    {member.department ?? '부서 없음'} · {formatAge(member.age)} · {genderLabel(member.gender)}
+                  </p>
                 </div>
               </div>
-              <div className="relative shrink-0">
+            </div>
+            <div className="mt-3 grid grid-cols-1 gap-2 px-4 pb-3 md:hidden">
+              <BirthDateSelect
+                value={member.birth_date ?? ''}
+                onChange={(value) => changeMemberProfile(member.user_id, { birth_date: value || null })}
+                compact
+              />
+              <div className="grid grid-cols-3 gap-2">
+                <select
+                  value={member.department_id ?? ''}
+                  onChange={(e) => changeDepartment(member.user_id, e.target.value ? Number(e.target.value) : null)}
+                  className="h-9 rounded border border-border bg-card px-2 text-mini outline-none"
+                  aria-label="부서 변경"
+                >
+                  <option value="">부서 없음</option>
+                  {departments.map((department) => (
+                    <option key={department.department_id} value={department.department_id}>{department.name}</option>
+                  ))}
+                </select>
+                <select
+                  value={member.gender ?? undefined}
+                  onChange={(e) => changeMemberProfile(member.user_id, { gender: e.target.value as Gender })}
+                  className="h-9 rounded border border-border bg-card px-2 text-mini outline-none"
+                  aria-label="성별 변경"
+                >
+                  {GENDER_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
                 <select
                   value={BACKEND_TO_ROLE[member.role]}
                   onChange={(e) => changeRole(member.user_id, e.target.value as Role)}
-                  className="appearance-none h-7 px-2 pr-5 rounded border border-border bg-card text-mini outline-none cursor-pointer hover:border-foreground transition-colors"
-                  aria-label="역할 변경"
+                  className="h-9 rounded border border-border bg-card px-2 text-mini outline-none"
+                  aria-label="권한 변경"
                 >
                   {(['관리자', '멤버', '뷰어'] as Role[]).map((r) => (
                     <option key={r} value={r}>{r}</option>
                   ))}
                 </select>
-                <MoreVertical size={12} className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
               </div>
             </div>
 
             {/* Desktop layout */}
-            <div className="hidden md:grid grid-cols-[1fr_auto_auto_auto_auto] gap-3 items-center">
+            <div className={`hidden md:grid ${DESKTOP_MEMBER_GRID} gap-3 items-center px-4 py-3`}>
               <div className="flex items-center gap-2.5">
                 <MemberAvatar member={member} />
                 <div>
@@ -273,7 +350,25 @@ export default function MembersSettingsPage() {
                 </select>
                 <MoreVertical size={12} className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
               </div>
-              <span className="text-mini text-muted-foreground">-</span>
+              <BirthDateSelect
+                value={member.birth_date ?? ''}
+                onChange={(value) => changeMemberProfile(member.user_id, { birth_date: value || null })}
+                compact
+              />
+              <span className="text-mini text-muted-foreground whitespace-nowrap">{formatAge(member.age)}</span>
+              <div className="relative">
+                <select
+                  value={member.gender ?? undefined}
+                  onChange={(e) => changeMemberProfile(member.user_id, { gender: e.target.value as Gender })}
+                  className="appearance-none h-7 px-2 pr-5 rounded border border-border bg-card text-mini outline-none cursor-pointer hover:border-foreground transition-colors"
+                  aria-label="성별 변경"
+                >
+                  {GENDER_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+                <MoreVertical size={12} className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              </div>
               <div className="relative">
                 <select
                   value={BACKEND_TO_ROLE[member.role]}
