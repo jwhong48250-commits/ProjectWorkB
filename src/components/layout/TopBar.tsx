@@ -38,6 +38,26 @@ export default function TopBar({
   const notifRef = useRef<HTMLDivElement>(null)
   const [unreadCount, setUnreadCount] = useState(0)
   const [workspaceRole, setWorkspaceRole] = useState(() => getCurrentWorkspaceRole())
+  const searchInputRef = useRef<HTMLInputElement>(null)
+
+  const shortcutKbd =
+    typeof navigator !== 'undefined' && /Mac|iPhone|iPod|iPad/i.test(navigator.userAgent)
+      ? '⌘K'
+      : 'Ctrl+K'
+
+  useEffect(() => {
+    function onGlobalKeyDown(e: KeyboardEvent) {
+      if (!e.ctrlKey && !e.metaKey) return
+      if (e.key.toLowerCase() !== 'k') return
+      e.preventDefault()
+      const input = searchInputRef.current
+      if (!input) return
+      input.focus()
+      input.select()
+    }
+    window.addEventListener('keydown', onGlobalKeyDown)
+    return () => window.removeEventListener('keydown', onGlobalKeyDown)
+  }, [])
 
   useEffect(() => {
     if (!notifOpen) return
@@ -116,6 +136,7 @@ export default function TopBar({
       >
         <Search size={13} className="text-muted-foreground shrink-0" aria-hidden="true" />
         <input
+          ref={searchInputRef}
           type="search"
           placeholder="회의 검색..."
           value={searchQuery}
@@ -127,8 +148,8 @@ export default function TopBar({
           aria-label="회의 검색"
         />
         {!searchFocused && (
-          <kbd className="hidden sm:flex items-center gap-0.5 text-micro text-muted-foreground">
-            <span>⌘K</span>
+          <kbd className="hidden sm:flex items-center gap-0.5 text-micro text-muted-foreground pointer-events-none">
+            <span>{shortcutKbd}</span>
           </kbd>
         )}
       </div>

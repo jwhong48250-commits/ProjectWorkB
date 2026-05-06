@@ -1,18 +1,22 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Search, User, ChevronDown, MessageSquare, Clock } from 'lucide-react'
+import { Search, User, ChevronDown, Clock } from 'lucide-react'
 import clsx from 'clsx'
 import Badge from '../components/ui/Badge'
-import { AvatarGroup } from '../components/ui/Avatar'
-import { PARTICIPANTS } from '../data/mockData'
 import { formatDateFull, durationMinutes } from '../utils/format'
 import { persistMeetingSnapshot } from '../utils/meetingRoutes'
 import { getCurrentWorkspaceId, WORKSPACE_CHANGED_EVENT } from '../utils/workspace'
-import type { Meeting } from '../types/meeting'
+import type { Meeting, Participant } from '../types/meeting'
 import { apiRequest } from '../api/client'
+import { fetchWorkspaceMembers } from '../api/workspaceMembers'
 
 type BackendStatus = 'scheduled' | 'in_progress' | 'done'
 type UiStatus = 'upcoming' | 'inprogress' | 'completed'
+
+interface MeetingHistoryParticipant {
+  user_id: number
+  name: string
+}
 
 interface MeetingHistoryItem {
   id: number
@@ -22,6 +26,7 @@ interface MeetingHistoryItem {
   started_at?: string | null
   ended_at?: string | null
   summary?: string | null
+  participants?: MeetingHistoryParticipant[]
 }
 
 interface MeetingHistoryResponse {
@@ -45,6 +50,34 @@ function pickStartAt(m: MeetingHistoryItem): string {
   )
 }
 
+const HISTORY_AVATAR_COLORS = [
+  '#6b78f6',
+  '#22c55e',
+  '#f97316',
+  '#ec4899',
+  '#eab308',
+  '#14b8a6',
+  '#8b5cf6',
+  '#64748b',
+]
+
+function historyParticipantsToAvatars(rows: MeetingHistoryParticipant[] | undefined): Participant[] {
+  if (!rows?.length) return []
+  return rows.map((p) => {
+    const color = HISTORY_AVATAR_COLORS[Math.abs(p.user_id) % HISTORY_AVATAR_COLORS.length]
+    const name = p.name.trim()
+    const initials =
+      name.length >= 2 ? name.slice(0, 2) : name.length === 1 ? name : '?'
+    return {
+      id: `u${p.user_id}`,
+      userId: p.user_id,
+      name: p.name,
+      avatarInitials: initials,
+      color,
+    }
+  })
+}
+
 function historyItemToMeeting(m: MeetingHistoryItem): Meeting {
   return {
     id: String(m.id),
@@ -52,7 +85,7 @@ function historyItemToMeeting(m: MeetingHistoryItem): Meeting {
     status: mapStatus(m.status) as Meeting['status'],
     startAt: pickStartAt(m),
     endAt: m.ended_at ?? undefined,
-    participants: [],
+    participants: historyParticipantsToAvatars(m.participants),
     agenda: [],
     summary: m.summary ?? undefined,
     actionItemCount: 0,
@@ -69,6 +102,10 @@ export default function HistoryPage() {
 
   const [searchKeyword, setSearchKeyword] = useState(initialKeyword)
   const [participantFilter, setParticipantFilter] = useState<string | null>(null)
+  const [workspaceMembers, setWorkspaceMembers] = useState<
+    { user_id: number; name: string }[]
+  >([])
+  const [membersLoading, setMembersLoading] = useState(false)
   const [meetingsHistory, setMeetingsHistory] = useState<MeetingHistoryItem[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -89,13 +126,37 @@ export default function HistoryPage() {
     return () => window.removeEventListener(WORKSPACE_CHANGED_EVENT, onWsChanged)
   }, [])
 
+  useEffect(() => {
+    let cancelled = false
+    setMembersLoading(true)
+    fetchWorkspaceMembers(workspaceId)
+      .then((members) => {
+        if (cancelled) return
+        const sorted = [...members].sort((a, b) =>
+          a.name.localeCompare(b.name, 'ko'),
+        )
+        setWorkspaceMembers(sorted.map((m) => ({ user_id: m.user_id, name: m.name })))
+      })
+      .catch(() => {
+        if (!cancelled) setWorkspaceMembers([])
+      })
+      .finally(() => {
+        if (!cancelled) setMembersLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [workspaceId])
+
   // Debounced fetch
   useEffect(() => {
     const keyword = searchKeyword.trim()
+    const controller = new AbortController()
     const handle = setTimeout(() => {
-      const controller = new AbortController()
       const qs = new URLSearchParams()
       if (keyword) qs.set('keyword', keyword)
+      const pid = participantFilter ? Number(participantFilter) : NaN
+      if (Number.isFinite(pid) && pid > 0) qs.set('participant_user_id', String(pid))
       qs.set('page', '1')
       qs.set('size', '20')
 
@@ -117,18 +178,15 @@ export default function HistoryPage() {
           setTotal(0)
         })
         .finally(() => setLoading(false))
-
-      return () => controller.abort()
     }, 400)
 
-    return () => clearTimeout(handle)
-  }, [searchKeyword, workspaceId])
+    return () => {
+      clearTimeout(handle)
+      controller.abort()
+    }
+  }, [searchKeyword, workspaceId, participantFilter])
 
-  const filtered = useMemo(() => {
-    // 현재는 backend가 keyword로 필터링을 수행하므로, 프론트에서는 추가 필터링을 최소화합니다.
-    // (participant filter는 추후 API 파라미터로 지원되면 이곳에서 qs에 포함시키는 방식으로 확장)
-    return meetingsHistory
-  }, [meetingsHistory])
+  const filtered = useMemo(() => meetingsHistory, [meetingsHistory])
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-6">
@@ -173,9 +231,13 @@ export default function HistoryPage() {
               participantFilter ? 'text-foreground' : 'text-muted-foreground',
             )}
           >
-            <option value="">모든 참석자</option>
-            {PARTICIPANTS.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
+            <option value="">
+              {membersLoading ? '참석자 목록 불러오는 중…' : '모든 참석자'}
+            </option>
+            {workspaceMembers.map((m) => (
+              <option key={m.user_id} value={String(m.user_id)}>
+                {m.name}
+              </option>
             ))}
           </select>
           <User size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
@@ -203,11 +265,9 @@ export default function HistoryPage() {
       ) : (
         <div className="flex flex-col divide-y divide-border border border-border rounded-lg overflow-hidden bg-card">
           {/* Table header */}
-          <div className="hidden md:grid grid-cols-[1fr_auto_auto_auto] gap-4 px-4 py-2 bg-muted/60 text-micro font-medium text-muted-foreground uppercase tracking-wide border-b border-border">
-            <span>회의 제목</span>
+          <div className="hidden md:grid grid-cols-[1fr_auto] gap-4 px-4 py-2 bg-muted/60 text-micro font-medium text-muted-foreground uppercase tracking-wide border-b border-border">
+            <span>회의</span>
             <span className="text-right">일시</span>
-            <span className="text-right">참석자</span>
-            <span className="text-right">결과</span>
           </div>
 
           {filtered.map((meeting) => (
@@ -216,7 +276,11 @@ export default function HistoryPage() {
               meeting={meeting}
               onClick={() => {
                 persistMeetingSnapshot(historyItemToMeeting(meeting))
-                navigate(`/meetings/${meeting.id}/notes`)
+                const path =
+                  meeting.status === 'scheduled'
+                    ? `/meetings/${meeting.id}/upcoming`
+                    : `/meetings/${meeting.id}/notes`
+                navigate(path)
               }}
             />
           ))}
@@ -224,14 +288,14 @@ export default function HistoryPage() {
       )}
 
       {/* Chatbot placeholder */}
-      <div className="mt-6 mb-6 p-4 rounded-lg border border-dashed border-border bg-muted/20 text-center">
+      {/* <div className="mt-6 mb-6 p-4 rounded-lg border border-dashed border-border bg-muted/20 text-center">
         <MessageSquare size={18} className="text-muted-foreground mx-auto mb-2" />
         <p className="text-sm text-muted-foreground font-medium">챗봇으로 과거 회의 내용 질문하기</p>
         <p className="text-mini text-muted-foreground/70 mt-0.5">
-          {/* TODO: implement chatbot panel for history search */}
+          TODO: implement chatbot panel for history search
           예: "지난 달 투자 관련 회의에서 결정된 사항을 알려줘"
         </p>
-      </div>
+      </div> */}
     </div>
   )
 }
@@ -259,7 +323,7 @@ function MeetingRow({
           onClick()
         }
       }}
-      className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto_auto] gap-2 md:gap-4 px-4 py-3 cursor-pointer hover:bg-muted/40 transition-colors"
+      className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2 md:gap-4 px-4 py-3 cursor-pointer hover:bg-muted/40 transition-colors"
     >
       {/* Title + tags */}
       <div className="min-w-0">
@@ -287,13 +351,6 @@ function MeetingRow({
         )}
       </div>
 
-      {/* Participants */}
-      <div className="flex items-center justify-end">
-        <AvatarGroup participants={[]} max={3} />
-      </div>
-
-      {/* Stats */}
-      <div className="flex items-center justify-end gap-3 text-mini text-muted-foreground" />
     </div>
   )
 }

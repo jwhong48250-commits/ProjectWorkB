@@ -4,6 +4,28 @@ import { MemoryRouter } from 'react-router-dom'
 import MeetingCard from '../../../components/home/MeetingCard'
 import type { Meeting } from '../../../types/meeting'
 
+const { mockUser } = vi.hoisted(() => ({
+  mockUser: {
+    id: 42,
+    email: 't@test.com',
+    name: '테스트',
+    role: 'member' as const,
+    workspace_id: 1,
+  },
+}))
+
+vi.mock('../../../context/AuthContext', () => ({
+  useAuth: () => ({
+    user: mockUser,
+    loading: false,
+    isAuthenticated: true,
+    isAdmin: false,
+    refreshSession: async () => null,
+    saveUser: vi.fn(),
+    signOut: async () => {},
+  }),
+}))
+
 vi.mock('../../../utils/meetingRoutes', () => ({
   persistMeetingSnapshot: vi.fn(),
 }))
@@ -101,10 +123,47 @@ describe('MeetingCard', () => {
   })
 
   describe('네비게이션', () => {
-    it('inprogress 카드 클릭 시 /live/{id}로 이동합니다', () => {
-      renderCard(makeMeeting({ id: 'live-1', status: 'inprogress' }))
+    it('inprogress 카드 클릭 시 참가자면 /live/{id}로 이동합니다', () => {
+      renderCard(
+        makeMeeting({
+          id: 'live-1',
+          status: 'inprogress',
+          participants: [
+            {
+              id: 'u42',
+              userId: mockUser.id,
+              name: '테스트',
+              avatarInitials: '테스',
+              color: '#6b78f6',
+            },
+          ],
+        }),
+      )
       fireEvent.click(screen.getByRole('button'))
       expect(mockNavigate).toHaveBeenCalledWith('/live/live-1')
+    })
+
+    it('inprogress 카드는 참가자가 아니면 이동하지 않고 안내합니다', () => {
+      const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
+      renderCard(
+        makeMeeting({
+          id: 'live-2',
+          status: 'inprogress',
+          participants: [
+            {
+              id: 'u99',
+              userId: 99,
+              name: '다른사람',
+              avatarInitials: '다른',
+              color: '#22c55e',
+            },
+          ],
+        }),
+      )
+      fireEvent.click(screen.getByRole('button'))
+      expect(mockNavigate).not.toHaveBeenCalled()
+      expect(alertSpy).toHaveBeenCalledWith('진행 중인 회의라 입장하실 수 없습니다.')
+      alertSpy.mockRestore()
     })
 
     it('upcoming 카드 클릭 시 /meetings/{id}/upcoming으로 이동합니다', () => {
