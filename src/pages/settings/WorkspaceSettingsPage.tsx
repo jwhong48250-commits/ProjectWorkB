@@ -12,12 +12,6 @@ import {
 } from "../../utils/workspaceLogo";
 import { getCurrentWorkspaceRole } from "../../utils/workspace";
 
-const SUMMARY_STYLES = [
-  "간결형 (결정사항·액션아이템 중심)",
-  "상세형 (전문 포함)",
-  "발표형 (PPT 구조)",
-  "커스텀",
-];
 const LANGUAGES = ["한국어", "English", "日本語", "中文"];
 const MAX_LOGO_SIZE = 1024 * 1024;
 
@@ -37,7 +31,6 @@ export default function WorkspaceSettingsPage() {
   const [teamName, setTeamName] = useState("Workb 팀");
   const [industry, setIndustry] = useState("");
   const [language, setLanguage] = useState("한국어");
-  const [summaryStyle, setSummaryStyle] = useState(SUMMARY_STYLES[0]);
   const [logoUrl, setLogoUrl] = useState(DEFAULT_WORKSPACE_LOGO_URL);
   const [logoFileName, setLogoFileName] = useState("");
   const [saved, setSaved] = useState(false);
@@ -60,7 +53,6 @@ export default function WorkspaceSettingsPage() {
         setTeamName(workspace.name);
         setIndustry(workspace.industry ?? "");
         setLanguage(workspace.default_language ?? "한국어");
-        setSummaryStyle(workspace.summary_style ?? SUMMARY_STYLES[0]);
         if (workspace.logo_url) {
           setWorkspaceLogoUrl(workspaceId, workspace.logo_url);
         }
@@ -129,7 +121,6 @@ export default function WorkspaceSettingsPage() {
         name: teamName,
         industry: industry || null,
         default_language: language,
-        summary_style: summaryStyle,
         logo_url: isLocalUpload ? null : logoUrl || null,
       });
       if (isLocalUpload) {
@@ -141,7 +132,6 @@ export default function WorkspaceSettingsPage() {
       setTeamName(workspace.name);
       setIndustry(workspace.industry ?? "");
       setLanguage(workspace.default_language ?? "한국어");
-      setSummaryStyle(workspace.summary_style ?? SUMMARY_STYLES[0]);
       setLogoUrl(isLocalUpload ? logoUrl : workspace.logo_url ?? DEFAULT_WORKSPACE_LOGO_URL);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -302,31 +292,6 @@ export default function WorkspaceSettingsPage() {
               >
                 {lang}
               </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Summary style */}
-        <div>
-          <label className="block text-sm font-medium text-foreground mb-1.5">
-            회의록 요약 스타일
-          </label>
-          <div className="flex flex-col gap-2">
-            {SUMMARY_STYLES.map((style) => (
-              <label
-                key={style}
-                className="flex items-center gap-2.5 cursor-pointer"
-              >
-                <input
-                  type="radio"
-                  name="summaryStyle"
-                  value={style}
-                  checked={summaryStyle === style}
-                  onChange={() => setSummaryStyle(style)}
-                  className="accent-accent"
-                />
-                <span className="text-sm text-foreground">{style}</span>
-              </label>
             ))}
           </div>
         </div>

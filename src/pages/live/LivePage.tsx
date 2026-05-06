@@ -32,7 +32,6 @@ import {
   readMeetingSnapshotForRoute,
 } from "../../utils/meetingRoutes";
 import type { Meeting } from "../../types/meeting";
-import { generateQuickReport } from "../../api/chatbot";
 import { useLiveSTT } from "../../hooks/useLiveSTT";
 import LiveScreenPage from "../../pages/live/LiveScreenPage";
 import LiveImagePanel from "./LiveImagePanel";
@@ -221,7 +220,6 @@ export default function LivePage() {
     const workspaceId = getCurrentWorkspaceId();
     setIsEndingMeeting(true);
     void endWorkspaceMeeting(workspaceId, Number(meetingId));
-    void generateQuickReport(workspaceId, Number(meetingId));
     stopMeeting();
   }
 
