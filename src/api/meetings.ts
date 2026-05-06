@@ -14,6 +14,7 @@ interface MeetingSearchItem {
   scheduled_at?: string | null
   participants?: { user_id: number; name: string }[]
   summary?: string | null
+  status?: 'scheduled' | 'in_progress' | 'done'
 }
 
 interface MeetingSearchResponseBody {

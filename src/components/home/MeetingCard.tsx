@@ -6,6 +6,7 @@ import { AvatarGroup } from '../ui/Avatar'
 import type { Meeting } from '../../types/meeting'
 import { formatRelativeTime, formatTime } from '../../utils/format'
 import { persistMeetingSnapshot } from '../../utils/meetingRoutes'
+import { useAuth } from '../../context/AuthContext'
 
 interface MeetingCardProps {
   meeting: Meeting
@@ -18,8 +19,18 @@ function getMeetingRoute(meeting: Meeting): string {
   return `/meetings/${meeting.id}/notes`
 }
 
-function goToMeeting(navigate: ReturnType<typeof useNavigate>, meeting: Meeting) {
-  if (meeting.status === 'inprogress') {
+/** 대시보드 참가자(user_id)에 현재 사용자가 포함되는지 — 진행 중 재입장 허용에 사용 */
+function userIsMeetingParticipant(meeting: Meeting, userId: number | null | undefined): boolean {
+  if (userId == null || !Number.isFinite(userId)) return false
+  return meeting.participants.some((p) => p.userId === userId)
+}
+
+function goToMeeting(
+  navigate: ReturnType<typeof useNavigate>,
+  meeting: Meeting,
+  userId: number | null | undefined,
+) {
+  if (meeting.status === 'inprogress' && !userIsMeetingParticipant(meeting, userId)) {
     window.alert('진행 중인 회의라 입장하실 수 없습니다.')
     return
   }
@@ -30,25 +41,29 @@ function goToMeeting(navigate: ReturnType<typeof useNavigate>, meeting: Meeting)
 
 export default function MeetingCard({ meeting }: MeetingCardProps) {
   const navigate = useNavigate()
+  const { user } = useAuth()
 
   const isInProgress = meeting.status === 'inprogress'
+  const canEnterLive = userIsMeetingParticipant(meeting, user?.id)
+  const isClickable = !isInProgress || canEnterLive
 
   return (
     <article
       role="button"
       tabIndex={0}
-      onClick={() => goToMeeting(navigate, meeting)}
+      aria-disabled={isInProgress && !canEnterLive}
+      onClick={() => goToMeeting(navigate, meeting, user?.id)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
-          goToMeeting(navigate, meeting)
+          goToMeeting(navigate, meeting, user?.id)
         }
       }}
       className={clsx(
         'group flex flex-col gap-2.5 p-3.5 rounded-lg border bg-card',
-        isInProgress
-          ? 'cursor-default border-status-inprogress/25 ring-1 ring-status-inprogress/15'
-          : 'cursor-pointer hover:shadow-card-hover hover:border-accent/25 transition-all duration-quick border-border',
+        isClickable
+          ? 'cursor-pointer hover:shadow-card-hover hover:border-accent/25 transition-all duration-quick border-border'
+          : 'cursor-default border-status-inprogress/25 ring-1 ring-status-inprogress/15',
       )}
     >
       {/* Top row: status badge + time */}

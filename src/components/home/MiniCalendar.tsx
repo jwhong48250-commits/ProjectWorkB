@@ -25,7 +25,11 @@ export default function MiniCalendar({ meetings = [] }: { meetings?: Meeting[] }
   const meetingDates = useMemo(() => getMeetingDates(meetings), [meetings])
 
   // First day of month, number of days
-  const firstDay = new Date(viewYear, viewMonth, 1).getDay() // 0=Sun
+  // 월~일 기준으로 그리드를 맞추기 위해 leading empty cell 수를 변환한다.
+  // getDay(): 0=Sun ... 6=Sat
+  // Monday-first: 0=Mon ... 6=Sun
+  const firstDaySun0 = new Date(viewYear, viewMonth, 1).getDay()
+  const firstDay = (firstDaySun0 + 6) % 7
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate()
 
   const monthLabel = new Date(viewYear, viewMonth, 1).toLocaleDateString('ko-KR', {
@@ -33,7 +37,7 @@ export default function MiniCalendar({ meetings = [] }: { meetings?: Meeting[] }
     month: 'long',
   })
 
-  const DOW = ['일', '월', '화', '수', '목', '금', '토']
+  const DOW = ['월', '화', '수', '목', '금', '토', '일']
 
   function prevMonth() {
     if (viewMonth === 0) { setViewMonth(11); setViewYear((y) => y - 1) }
@@ -94,7 +98,7 @@ export default function MiniCalendar({ meetings = [] }: { meetings?: Meeting[] }
             key={d}
             className={clsx(
               'text-center text-micro font-medium py-0.5',
-              i === 0 ? 'text-red-400' : i === 6 ? 'text-blue-400' : 'text-muted-foreground',
+              i === 6 ? 'text-red-400' : i === 5 ? 'text-blue-400' : 'text-muted-foreground',
             )}
           >
             {d}
