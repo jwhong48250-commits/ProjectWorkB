@@ -1,11 +1,21 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Send, Loader2, Paperclip, CheckCircle2, FileText } from "lucide-react";
+import { X, Send, Loader2, Paperclip, CheckCircle2, FileText, SquarePen, History, Trash2 } from "lucide-react";
 import clsx from "clsx";
 import ReactMarkdown from "react-markdown";
 import type { ChatMessage } from "../../types/chat";
 import { useLocation } from "react-router-dom";
 import { getCurrentWorkspaceId } from "../../api/client";
-import { sendChatMessage, getChatHistory, getPastMeetings, type PastMeeting, analyzeDocument } from "../../api/chatbot";
+import {
+    sendChatMessage,
+    getChatHistory,
+    getPastMeetings,
+    createChatSession,
+    listChatSessions,
+    deleteChatSession,
+    type PastMeeting,
+    type ChatSession,
+    analyzeDocument,
+} from "../../api/chatbot";
 import remarkGfm from "remark-gfm";
 
 // sessionStorge 키 - workspace별로 세션 분리
@@ -13,19 +23,15 @@ import remarkGfm from "remark-gfm";
 const sessionKey = (workspaceId: number) => `chatbot_session_${workspaceId}`;
 
 // 초기 웰컴 메시지 - API 호출 없이 정적으로 표시
-function getWelcomeMessage(meetingId: number | null): ChatMessage {
-    const meetingSection = meetingId
-        ? `**🎙 현재 회의**\n- 지금까지 논의 내용 요약\n- 결정 사항 / 액션 아이템 확인\n\n`
-        : "";
-
-    const content = [
-        "안녕하세요! **Workb AI 도우미**입니다.",
-        "아래 내용을 도와드릴 수 있어요.",
-        meetingSection + "**📁 자료 검색**\n- 업로드된 내부 문서 검색\n- 이전 회의 내용 조회",
-        "**🌐 외부 정보**\n- 웹 검색으로 최신 정보 조회",
-        "**📅 회의 일정**\n- 특정 날짜 회의 일정 조회",
-        "무엇이든 물어보세요!",
-    ].join("\n\n");
+function getWelcomeMessage(_meetingId: number | null): ChatMessage {
+    const content =
+        "안녕하세요! **Workb AI 도우미**입니다.\n\n" +
+        "아래 기능을 활용해보세요.\n\n" +
+        '- **📋 회의 보고서**\n - "지난 회의 간이보고서 만들어줘"  \n' +
+        '- **🔍 내용 검색**\n - "3월 회의에서 결정된 사항 알려줘"  \n' +
+        "- **📁 문서 검색**\n - 업로드한 내부 문서 질의응답  \n" +
+        "- **🌐 외부 정보**\n - 최신 뉴스, 트렌드 검색  \n" +
+        "- **📅 일정 관리**\n - 회의 일정 조회 · 등록 · 수정";
 
     return {
         id: "welcome",
@@ -126,10 +132,69 @@ export default function ChatFAB() {
 
     const [pastMeetings, setPastMeetings] = useState<PastMeeting[]>([]);
     const [pastMeetingsLoaded, setPastMeetingsLoaded] = useState(false);
-    const [pendingMessage, setPendingMessage] = useState<string | null>(null); // 선택 대기 중인 메시지
-    const [showMeetingSelector, setShowMeetingSelector] = useState(false); // 이전 회의 선택 UI 표시 여부
+    const [pendingMessage, setPendingMessage] = useState<string | null>(null);
+    const [showMeetingSelector, setShowMeetingSelector] = useState(false);
+
+    const [showHistory, setShowHistory] = useState(false);
+    const [sessions, setSessions] = useState<ChatSession[]>([]);
+    const [sessionsLoading, setSessionsLoading] = useState(false);
+
+    const [showChips, setShowChips] = useState(true);
+    // 웰컴 메시지만 있으면 최초 대화 전 → 칩 항상 표시
+    const isFirstChat = messages.length === 1 && messages[0].id === "welcome";
 
     const workspaceId = getCurrentWorkspaceId();
+
+    // 새 대화 시작
+    async function handleNewChat() {
+        const { session_id } = await createChatSession(workspaceId);
+        sessionStorage.setItem(sessionKey(workspaceId), session_id);
+        setMessages([getWelcomeMessage(meetingId)]);
+        setShowHistory(false);
+        setShowMeetingSelector(false);
+        setShowChips(true);
+    }
+
+    // 히스토리 패널 열기
+    async function handleOpenHistory() {
+        setShowHistory(true);
+        setSessionsLoading(true);
+        try {
+            const { sessions: list } = await listChatSessions(workspaceId);
+            setSessions(list);
+        } finally {
+            setSessionsLoading(false);
+        }
+    }
+
+    // 세션 선택 → 해당 대화 복원
+    async function handleSelectSession(sessionId: string) {
+        sessionStorage.setItem(sessionKey(workspaceId), sessionId);
+        const { messages: history } = await getChatHistory(workspaceId, sessionId);
+        setMessages(
+            history.length
+                ? history.map((m, i) => ({
+                      id: `h-${i}`,
+                      role: m.role,
+                      content: m.content,
+                      timestamp: m.timestamp,
+                      function_type: m.function_type,
+                  }))
+                : [getWelcomeMessage(meetingId)],
+        );
+        setShowHistory(false);
+    }
+
+    // 세션 삭제
+    async function handleDeleteSession(sessionId: string) {
+        await deleteChatSession(workspaceId, sessionId);
+        setSessions((prev) => prev.filter((s) => s.session_id !== sessionId));
+        // 현재 세션이 삭제된 경우 새 대화로
+        if (sessionStorage.getItem(sessionKey(workspaceId)) === sessionId) {
+            sessionStorage.removeItem(sessionKey(workspaceId));
+            setMessages([getWelcomeMessage(meetingId)]);
+        }
+    }
 
     // 챗봇 첫 오픈 시 sessionStorage에 session_id 있으면 히스토리 복원
     useEffect(() => {
@@ -278,6 +343,8 @@ export default function ChatFAB() {
         const text = input.trim();
         if (!text || isLoading) return;
 
+        setShowHistory(false); // 히스토리 패널 열려있으면 닫고 대화 이어서
+
         // 사용자 메시지 즉시 표시
         setMessages((prev) => [
             ...prev,
@@ -289,6 +356,7 @@ export default function ChatFAB() {
             },
         ]);
         setInput("");
+        setShowChips(false); // 첫 메시지 전송 후 칩 숨기기
 
         const isPastMeetingQuery = /이전|지난|과거|전 회의/.test(text);
         const isReportQuery = /보고서|간이보고서/.test(text);
@@ -305,12 +373,7 @@ export default function ChatFAB() {
     }
 
     // 회의 중일 때만 "현재 회의 요약" 찹 표시
-    const CHIPS = [
-        ...(meetingId ? ["지금까지 회의 요약", "담당 업무 조회"] : []),
-        "자료검색",
-        "외부 정보 검색",
-        "오늘 일정 확인",
-    ];
+    const CHIPS = ["지난 회의 요약", "간이보고서", "오늘 일정", "문서 검색", "담당 업무", "결정사항 확인"];
 
     return (
         <>
@@ -337,9 +400,10 @@ export default function ChatFAB() {
             {open && (
                 <div
                     className={clsx(
-                        "fixed right-4 sm:right-6 z-40 w-[calc(100vw-2rem)] sm:w-96 rounded-2xl shadow-2xl border border-border",
-                        "bg-card flex flex-col overflow-hidden",
+                        "fixed right-4 sm:right-6 z-40 rounded-2xl shadow-2xl border border-border",
+                        "bg-card flex flex-row overflow-hidden",
                         "animate-in slide-in-from-bottom-4 duration-200",
+                        showHistory ? "w-[calc(100vw-2rem)] sm:w-[640px]" : "w-[calc(100vw-2rem)] sm:w-96",
                     )}
                     style={{
                         bottom: "max(5.5rem, calc(env(safe-area-inset-bottom) + 5rem))",
@@ -348,190 +412,304 @@ export default function ChatFAB() {
                     role="dialog"
                     aria-label="Workb AI 도우미"
                 >
-                    {/* Header */}
-                    <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border bg-accent/5">
-                        <img src="/brand/chatbot.png" alt="AI 도우미" width={28} height={28} className="rounded-md object-contain" />
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-foreground">Workb 도우미</p>
-                            <p className="text-mini text-muted-foreground">AI 어시스턴트 · 항상 대기 중</p>
-                        </div>
-                        <button
-                            onClick={() => setOpen(false)}
-                            className="text-muted-foreground hover:text-foreground transition-colors"
-                            aria-label="닫기"
-                        >
-                            <X size={16} />
-                        </button>
-                    </div>
-
-                    {/* Chip hints */}
-                    <div className="flex flex-wrap gap-1.5 px-3 py-2 border-b border-border bg-muted/30">
-                        {CHIPS.map((chip) => (
-                            <button
-                                key={chip}
-                                onClick={() => setInput(chip)}
-                                className="px-2.5 py-1 rounded-full text-mini bg-accent-subtle text-accent border border-accent/20 hover:bg-accent/10 transition-colors"
-                            >
-                                {chip}
-                            </button>
-                        ))}
-                    </div>
-
-                    {/* Messages */}
-                    <div className="flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-2.5 min-h-0">
-                        {messages.map((msg) => (
-                            <div
-                                key={msg.id}
-                                className={clsx(
-                                    "flex gap-2 items-end",
-                                    msg.role === "user" ? "flex-row-reverse" : "flex-row",
-                                )}
-                            >
-                                {msg.role === "assistant" && (
-                                    <div className="shrink-0">
-                                        <img src="/brand/chatbot.png" alt="AI 도우미" width={22} height={22} className="rounded-md object-contain" />
+                    {/* 히스토리 사이드바 */}
+                    {showHistory && (
+                        <div className="w-52 shrink-0 border-r border-border flex flex-col bg-muted/30">
+                            <div className="flex items-center justify-between px-3 py-3 border-b border-border">
+                                <p className="text-sm font-semibold text-foreground">대화 기록</p>
+                                <button
+                                    onClick={() => setShowHistory(false)}
+                                    className="text-muted-foreground hover:text-foreground transition-colors"
+                                    aria-label="닫기"
+                                >
+                                    <X size={14} />
+                                </button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto">
+                                {sessionsLoading ? (
+                                    <div className="flex items-center justify-center py-8">
+                                        <Loader2 size={15} className="animate-spin text-muted-foreground" />
+                                    </div>
+                                ) : sessions.length === 0 ? (
+                                    <p className="text-mini text-muted-foreground text-center py-8 px-3">
+                                        대화 기록이 없습니다.
+                                    </p>
+                                ) : (
+                                    <div className="flex flex-col py-1">
+                                        {sessions.map((s) => (
+                                            <div
+                                                key={s.session_id}
+                                                className={clsx(
+                                                    "group flex items-center gap-1 px-3 py-2 cursor-pointer transition-colors",
+                                                    sessionStorage.getItem(sessionKey(workspaceId)) === s.session_id
+                                                        ? "bg-accent/10 text-accent"
+                                                        : "hover:bg-muted text-foreground",
+                                                )}
+                                                onClick={() => void handleSelectSession(s.session_id)}
+                                            >
+                                                <p className="flex-1 text-xs truncate">{s.preview || "새 대화"}</p>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        void handleDeleteSession(s.session_id);
+                                                    }}
+                                                    className="shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-red-500 transition-all p-0.5"
+                                                    aria-label="삭제"
+                                                >
+                                                    <Trash2 size={11} />
+                                                </button>
+                                            </div>
+                                        ))}
                                     </div>
                                 )}
-                                <div
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 채팅 영역 */}
+                    <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+                        {/* Header */}
+                        <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border bg-accent/5">
+                            <img
+                                src="/brand/chatbot.png"
+                                alt="AI 도우미"
+                                width={28}
+                                height={28}
+                                className="rounded-md object-contain"
+                            />
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-foreground">Workb 도우미</p>
+                                <p className="text-mini text-muted-foreground">AI 어시스턴트 · 항상 대기 중</p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <button
+                                    onClick={handleOpenHistory}
                                     className={clsx(
-                                        "max-w-[80%] px-3 py-2 rounded-2xl text-sm",
-                                        msg.role === "user"
-                                            ? "bg-accent text-accent-foreground rounded-br-sm"
-                                            : "bg-muted text-foreground rounded-bl-sm",
+                                        "transition-colors p-1",
+                                        showHistory ? "text-accent" : "text-muted-foreground hover:text-foreground",
+                                    )}
+                                    aria-label="대화 히스토리"
+                                    title="대화 히스토리"
+                                >
+                                    <History size={15} />
+                                </button>
+                                <button
+                                    onClick={handleNewChat}
+                                    className="text-muted-foreground hover:text-foreground transition-colors p-1"
+                                    aria-label="새 대화"
+                                    title="새 대화"
+                                >
+                                    <SquarePen size={15} />
+                                </button>
+                            </div>
+                            <button
+                                onClick={() => setOpen(false)}
+                                className="text-muted-foreground hover:text-foreground transition-colors"
+                                aria-label="닫기"
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+
+                        {/* Chip hints */}
+                        {(isFirstChat || showChips) && (
+                            <div className="flex flex-wrap gap-1.5 px-3 py-2 border-b border-border bg-muted/30">
+                                {CHIPS.map((chip) => (
+                                    <button
+                                        key={chip}
+                                        onClick={() => setInput(chip)}
+                                        className="px-2.5 py-1 rounded-full text-mini bg-accent-subtle text-accent border border-accent/20 hover:bg-accent/10 transition-colors"
+                                    >
+                                        {chip}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                        {!isFirstChat && (
+                            <button
+                                onClick={() => setShowChips((v) => !v)}
+                                className="text-micro text-muted-foreground hover:text-foreground transition-colors px-3 py-1 border-b border-border bg-muted/10 text-left"
+                            >
+                                {showChips ? "▲ 빠른 질문 숨기기" : "▼ 빠른 질문"}
+                            </button>
+                        )}
+
+                        {/* Messages */}
+                        <div className="flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-2.5 min-h-0">
+                            {messages.map((msg) => (
+                                <div
+                                    key={msg.id}
+                                    className={clsx(
+                                        "flex gap-2 items-end",
+                                        msg.role === "user" ? "flex-row-reverse" : "flex-row",
                                     )}
                                 >
-                                    {msg.role === "assistant" ? (
-                                        // 어시스턴트 답변은 마크다운 렌더링
-                                        // 고지문, 근거 발화 blockquote, **볼드** 등 처리
-                                        <div className="prose prose-sm max-w-none dark:prose-invert [&_table]:block [&_table]:overflow-x-auto [&_table]:whitespace-nowrap">
-                                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
-                                        </div>
-                                    ) : (
-                                        msg.content
-                                    )}
-                                    {msg.role === "assistant" && msg.sources && msg.sources.length > 0 && (
-                                        <div className="mt-2 pt-2 border-t border-border flex flex-col gap-1.5">
-                                            <p className="text-micro text-muted-foreground font-medium">🌐 참고 자료</p>
-                                            {msg.sources
-                                                .filter((s, i, arr) => arr.findIndex((x) => x.url === s.url) === i) // URL 중복 제거
-                                                .map((s, i) => (
-                                                    <a
-                                                        key={i}
-                                                        href={s.url}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="flex flex-col gap-0.5 p-2 rounded-lg bg-muted/60 hover:bg-muted transition-colors"
-                                                    >
-                                                        <span className="text-mini font-medium text-foreground line-clamp-1">
-                                                            {s.title}
-                                                        </span>
-                                                        <span className="text-micro text-muted-foreground line-clamp-1">
-                                                            {new URL(s.url).hostname}
-                                                        </span>
-                                                    </a>
-                                                ))}
-                                        </div>
-                                    )}
                                     {msg.role === "assistant" && (
-                                        <div>
-                                            {msg.function_type === "quick_report" && meetingId && (
-                                                <a
-                                                    href={`/meetings/${meetingId}/reports?tab=minutes`}
-                                                    className="mt-2 flex items-center gap-1.5 h-8 px-3 rounded-lg bg-accent text-accent-foreground text-mini font-medium hover:bg-accent/90 transition-colors w-fit"
-                                                >
-                                                    <FileText size={12} /> 회의록에서 보기
-                                                </a>
-                                            )}
-                                            {msg.function_type === "report_guide" && meetingId && (
-                                                <a
-                                                    href={`/meetings/${meetingId}/reports?tab=minutes`}
-                                                    className="mt-2 flex items-center gap-1.5 h-8 px-3 rounded-lg bg-accent text-accent-foreground text-mini font-medium hover:bg-accent/90 transition-colors w-fit"
-                                                >
-                                                    <FileText size={12} /> 회의록 페이지로 이동
-                                                </a>
-                                            )}
+                                        <div className="shrink-0">
+                                            <img
+                                                src="/brand/chatbot.png"
+                                                alt="AI 도우미"
+                                                width={22}
+                                                height={22}
+                                                className="rounded-md object-contain"
+                                            />
                                         </div>
                                     )}
+                                    <div
+                                        className={clsx(
+                                            "max-w-[80%] px-3 py-2 rounded-2xl text-sm",
+                                            msg.role === "user"
+                                                ? "bg-accent text-accent-foreground rounded-br-sm"
+                                                : "bg-muted text-foreground rounded-bl-sm",
+                                        )}
+                                    >
+                                        {msg.role === "assistant" ? (
+                                            // 어시스턴트 답변은 마크다운 렌더링
+                                            // 고지문, 근거 발화 blockquote, **볼드** 등 처리
+                                            <div className="prose prose-sm max-w-none dark:prose-invert [&_table]:block [&_table]:overflow-x-auto [&_table]:whitespace-nowrap">
+                                                <ReactMarkdown
+                                                    remarkPlugins={[remarkGfm]}
+                                                    components={{ hr: () => <></> }}
+                                                >
+                                                    {msg.content}
+                                                </ReactMarkdown>
+                                            </div>
+                                        ) : (
+                                            msg.content
+                                        )}
+                                        {msg.role === "assistant" && msg.sources && msg.sources.length > 0 && (
+                                            <div className="mt-2 pt-2 border-t border-border flex flex-col gap-1.5">
+                                                <p className="text-micro text-muted-foreground font-medium">
+                                                    🌐 참고 자료
+                                                </p>
+                                                {msg.sources
+                                                    .filter((s, i, arr) => arr.findIndex((x) => x.url === s.url) === i) // URL 중복 제거
+                                                    .map((s, i) => (
+                                                        <a
+                                                            key={i}
+                                                            href={s.url}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="flex flex-col gap-0.5 p-2 rounded-lg bg-muted/60 hover:bg-muted transition-colors"
+                                                        >
+                                                            <span className="text-mini font-medium text-foreground line-clamp-1">
+                                                                {s.title}
+                                                            </span>
+                                                            <span className="text-micro text-muted-foreground line-clamp-1">
+                                                                {new URL(s.url).hostname}
+                                                            </span>
+                                                        </a>
+                                                    ))}
+                                            </div>
+                                        )}
+                                        {msg.role === "assistant" && (
+                                            <div>
+                                                {msg.function_type === "quick_report" && meetingId && (
+                                                    <a
+                                                        href={`/meetings/${meetingId}/reports?tab=minutes`}
+                                                        className="mt-2 flex items-center gap-1.5 h-8 px-3 rounded-lg bg-accent text-accent-foreground text-mini font-medium hover:bg-accent/90 transition-colors w-fit"
+                                                    >
+                                                        <FileText size={12} /> 회의록에서 보기
+                                                    </a>
+                                                )}
+                                                {msg.function_type === "report_guide" && meetingId && (
+                                                    <a
+                                                        href={`/meetings/${meetingId}/reports?tab=minutes`}
+                                                        className="mt-2 flex items-center gap-1.5 h-8 px-3 rounded-lg bg-accent text-accent-foreground text-mini font-medium hover:bg-accent/90 transition-colors w-fit"
+                                                    >
+                                                        <FileText size={12} /> 회의록 페이지로 이동
+                                                    </a>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
-                        {/* 이전 회의 선택 UI - 2개 이상일 때 메시지 보류 후 표시 */}
-                        {showMeetingSelector && (
-                            <MeetingSelectorCard
-                                meetings={pastMeetings}
-                                onConfirm={(ids) => {
-                                    setShowMeetingSelector(false);
-                                    void sendMessage(pendingMessage ?? "", ids);
-                                    setPendingMessage("");
-                                }}
-                            />
-                        )}
-
-                        {/* 로딩 인디케이터 - 응답 대기 중 표시 */}
-                        {isLoading && (
-                            <div className="flex gap-2 items-end">
-                                <div className="shrink-0">
-                                    <img src="/brand/chatbot.png" alt="AI 도우미" width={22} height={22} className="rounded-md object-contain" />
-                                </div>
-                                <div className="bg-muted text-muted-foreground px-3 py-2 rounded-2xl rounded-bl-sm text-sm flex items-center gap-1.5">
-                                    <Loader2 size={13} className="animate-spin" />
-                                    <span>답변 생성 중...</span>
-                                </div>
-                            </div>
-                        )}
-                        <div ref={bottomRef} />
-                    </div>
-
-                    {/* 파일 첨부 버튼 */}
-                    <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept=".pdf,.pptx,.ppt,.html,.htm,.md,.markdown,.docx,.doc,.xlsx,.xls"
-                        className="hidden"
-                        onChange={handleFileUpload}
-                    />
-
-                    {/* Input */}
-                    <form
-                        className="flex items-center gap-2 px-3 py-2.5 border-t border-border"
-                        onSubmit={(e) => {
-                            e.preventDefault();
-                            void handleSend();
-                        }}
-                    >
-                        <button
-                            type="button"
-                            onClick={() => fileInputRef.current?.click()}
-                            disabled={uploadStatus === "uploading"}
-                            className="shrink-0 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
-                            aria-label="파일 첨부"
-                        >
-                            {uploadStatus === "uploading" ? (
-                                <Loader2 size={16} className="animate-spin" />
-                            ) : uploadStatus === "done" ? (
-                                <CheckCircle2 size={16} className="text-green-500" />
-                            ) : (
-                                <Paperclip size={16} />
+                            ))}
+                            {/* 이전 회의 선택 UI - 2개 이상일 때 메시지 보류 후 표시 */}
+                            {showMeetingSelector && (
+                                <MeetingSelectorCard
+                                    meetings={pastMeetings}
+                                    onConfirm={(ids) => {
+                                        setShowMeetingSelector(false);
+                                        void sendMessage(pendingMessage ?? "", ids);
+                                        setPendingMessage("");
+                                    }}
+                                />
                             )}
-                        </button>
+
+                            {/* 로딩 인디케이터 - 응답 대기 중 표시 */}
+                            {isLoading && (
+                                <div className="flex gap-2 items-end">
+                                    <div className="shrink-0">
+                                        <img
+                                            src="/brand/chatbot.png"
+                                            alt="AI 도우미"
+                                            width={22}
+                                            height={22}
+                                            className="rounded-md object-contain"
+                                        />
+                                    </div>
+                                    <div className="bg-muted text-muted-foreground px-3 py-2 rounded-2xl rounded-bl-sm text-sm flex items-center gap-1.5">
+                                        <Loader2 size={13} className="animate-spin" />
+                                        <span>답변 생성 중...</span>
+                                    </div>
+                                </div>
+                            )}
+                            <div ref={bottomRef} />
+                        </div>
+
+                        {/* 파일 첨부 버튼 */}
                         <input
-                            ref={inputRef}
-                            type="text"
-                            value={input}
-                            onChange={(e) => setInput(e.target.value)}
-                            placeholder="무엇이든 물어보세요..."
-                            disabled={isLoading}
-                            className="flex-1 bg-transparent outline-none text-sm placeholder:text-muted-foreground disabled:opacity-50"
+                            ref={fileInputRef}
+                            type="file"
+                            accept=".pdf,.pptx,.ppt,.html,.htm,.md,.markdown,.docx,.doc,.xlsx,.xls"
+                            className="hidden"
+                            onChange={handleFileUpload}
                         />
-                        <button
-                            type="submit"
-                            disabled={!input.trim()}
-                            className="flex items-center justify-center w-8 h-8 rounded-full bg-accent text-accent-foreground disabled:opacity-40 disabled:cursor-not-allowed hover:bg-accent/90 transition-colors"
-                            aria-label="전송"
+
+                        {/* Input */}
+                        <form
+                            className="flex items-center gap-2 px-3 py-2.5 border-t border-border"
+                            onSubmit={(e) => {
+                                e.preventDefault();
+                                void handleSend();
+                            }}
                         >
-                            <Send size={14} />
-                        </button>
-                    </form>
+                            <button
+                                type="button"
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={uploadStatus === "uploading"}
+                                className="shrink-0 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
+                                aria-label="파일 첨부"
+                            >
+                                {uploadStatus === "uploading" ? (
+                                    <Loader2 size={16} className="animate-spin" />
+                                ) : uploadStatus === "done" ? (
+                                    <CheckCircle2 size={16} className="text-green-500" />
+                                ) : (
+                                    <Paperclip size={16} />
+                                )}
+                            </button>
+                            <input
+                                ref={inputRef}
+                                type="text"
+                                value={input}
+                                onChange={(e) => setInput(e.target.value)}
+                                placeholder="무엇이든 물어보세요..."
+                                disabled={isLoading}
+                                className="flex-1 bg-transparent outline-none text-sm placeholder:text-muted-foreground disabled:opacity-50"
+                            />
+                            <button
+                                type="submit"
+                                disabled={!input.trim()}
+                                className="flex items-center justify-center w-8 h-8 rounded-full bg-accent text-accent-foreground disabled:opacity-40 disabled:cursor-not-allowed hover:bg-accent/90 transition-colors"
+                                aria-label="전송"
+                            >
+                                <Send size={14} />
+                            </button>
+                        </form>
+                    </div>
+                    {/* 채팅 영역 끝 */}
                 </div>
             )}
         </>

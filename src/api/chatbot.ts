@@ -81,6 +81,24 @@ export async function getPastMeetings(
     )
 }
 
+export interface ChatSession {
+    session_id: string
+    created_at: string
+    preview: string
+}
+
+export async function createChatSession(workspaceId: number): Promise<{ session_id: string }> {
+    return apiRequest(`/knowledges/workspace/${workspaceId}/chatbot/sessions`, { method: 'POST' })
+}
+
+export async function listChatSessions(workspaceId: number): Promise<{ sessions: ChatSession[] }> {
+    return apiRequest(`/knowledges/workspace/${workspaceId}/chatbot/sessions`)
+}
+
+export async function deleteChatSession(workspaceId: number, sessionId: string): Promise<void> {
+    await apiRequest(`/knowledges/workspace/${workspaceId}/chatbot/sessions/${sessionId}`, { method: 'DELETE' })
+}
+
 export async function uploadDocument(workspaceId: number, file: File): Promise<void> {
     const form = new FormData()
     form.append('file', file)
