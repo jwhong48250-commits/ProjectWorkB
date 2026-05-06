@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import clsx from 'clsx'
 import type { Meeting } from '../types/meeting'
 import { fetchWorkspaceMeetingsByDateRange } from '../api/meetings'
@@ -33,6 +34,7 @@ export default function CalendarPage() {
   const [googleConnected, setGoogleConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [workspaceId, setWorkspaceId] = useState(() => getCurrentWorkspaceId())
+  const navigate = useNavigate()
 
   // Listen to workspace changes event
   useEffect(() => {
@@ -51,22 +53,25 @@ export default function CalendarPage() {
       setLoading(true)
       setError(null)
       try {
-        // fetch workb meetings
         const from = new Date(viewYear, viewMonth, 1)
         const to = new Date(viewYear, viewMonth + 1, 0)
         const [rows] = await Promise.all([
           fetchWorkspaceMeetingsByDateRange(workspaceId, from, to),
         ])
-        const workbItems: CalendarItem[] = (rows ?? []).map((r) => {
-          const startAt = r.scheduled_at ?? from.toISOString()
-          return {
-            id: String(r.meeting_id),
-            title: r.title,
-            status: 'upcoming',
-            startAt,
-            source: 'workb',
-          }
-        })
+        const workbItems: CalendarItem[] = (rows ?? [])
+          .filter((r) => r.status !== 'in_progress')
+          .map((r) => {
+            const startAt = r.scheduled_at ?? r.started_at ?? r.ended_at ?? from.toISOString()
+            const status: Meeting['status'] =
+              r.status === 'done' ? 'completed' : 'upcoming'
+            return {
+              id: String(r.meeting_id),
+              title: r.title,
+              status,
+              startAt,
+              source: 'workb',
+            }
+          })
         if (!cancelled) {
           setItems(workbItems)
         }
@@ -85,7 +90,8 @@ export default function CalendarPage() {
     }
   }, [workspaceId, viewYear, viewMonth])
 
-  // Load Google Calendar events for given workspace and month
+  // Load Google Calendar events for given workspace and month.
+  // 요구사항: Google 연동이 되어 있으면 Google 캘린더만 사용, 아니면 WorkB DB 회의 사용.
   useEffect(() => {
     let cancelled = false
     async function loadGoogle() {
@@ -94,21 +100,24 @@ export default function CalendarPage() {
         const res = await getGoogleCalendarEvents(workspaceId, timeMin, 250)
         if (!cancelled) {
           setGoogleConnected(true)
-          setItems((prev) => {
-            const withoutGoogle = prev.filter((i) => i.source !== 'google')
-            const googleItems: CalendarItem[] = (Array.isArray(res.events) ? res.events : []).map((e: GoogleCalendarEvent) => ({
+          const googleItems: CalendarItem[] = (Array.isArray(res.events) ? res.events : []).map(
+            (e: GoogleCalendarEvent) => ({
               id: `gcal-${e.id}`,
               title: e.title,
               startAt: e.start,
               endAt: e.end,
               source: 'google',
               htmlLink: e.html_link ?? undefined,
-            }))
-            return [...withoutGoogle, ...googleItems]
-          })
+            }),
+          )
+          // Google이 연동된 경우: WorkB 회의 대신 Google 일정만 사용
+          setItems(googleItems)
         }
       } catch {
-        if (!cancelled) setGoogleConnected(false)
+        if (!cancelled) {
+          // Google 연동/호출 실패: WorkB DB 회의만 사용 (위 useEffect 결과 유지)
+          setGoogleConnected(false)
+        }
       }
     }
     loadGoogle()
@@ -129,6 +138,16 @@ export default function CalendarPage() {
   function getItemsByDate(date: Date): CalendarItem[] {
     const key = date.toDateString()
     return items.filter((item) => new Date(item.startAt).toDateString() === key)
+  }
+
+  function handleWorkbClick(item: CalendarItem & { status?: Meeting['status'] }) {
+    const idNum = Number(item.id)
+    if (!Number.isFinite(idNum)) return
+    if (item.status === 'completed') {
+      navigate(`/meetings/${idNum}/notes`)
+    } else {
+      navigate(`/meetings/${idNum}/upcoming`)
+    }
   }
 
   function prevMonth() {
@@ -318,7 +337,11 @@ export default function CalendarPage() {
               <ul className="flex-1 overflow-y-auto divide-y divide-border">
                 {/* WorkB 회의 */}
                 {selectedWorkbItems.map((m) => (
-                  <li key={m.id} className="px-4 py-3">
+                  <li
+                    key={m.id}
+                    className="px-4 py-3 cursor-pointer hover:bg-muted/40 transition-colors"
+                    onClick={() => handleWorkbClick(m)}
+                  >
                     <p className="text-sm font-medium text-foreground truncate">{m.title}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {new Date(m.startAt).toLocaleTimeString('ko-KR', {

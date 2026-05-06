@@ -157,7 +157,7 @@ export default function TopBar({
       <div className="flex-1" />
 
       <div className="flex items-center gap-1">
-        {(workspaceRole === 'admin' || workspaceRole === 'member') && (
+        {workspaceRole === 'admin' && (
           <Tooltip label="새 회의 생성" placement="bottom">
             <button
               onClick={() => navigate('/meetings/new')}
