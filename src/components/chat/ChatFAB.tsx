@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Send, Loader2, Paperclip, CheckCircle2, FileText, SquarePen, History, Trash2 } from "lucide-react";
+import { X, Send, Loader2, Paperclip, CheckCircle2, FileText, SquarePen, History, Trash2, Pencil, Check } from "lucide-react";
 import clsx from "clsx";
 import ReactMarkdown from "react-markdown";
 import type { ChatMessage } from "../../types/chat";
@@ -12,6 +12,7 @@ import {
     createChatSession,
     listChatSessions,
     deleteChatSession,
+    renameChatSession,
     type PastMeeting,
     type ChatSession,
     analyzeDocument,
@@ -138,6 +139,8 @@ export default function ChatFAB() {
     const [showHistory, setShowHistory] = useState(false);
     const [sessions, setSessions] = useState<ChatSession[]>([]);
     const [sessionsLoading, setSessionsLoading] = useState(false);
+    const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+    const [editingTitle, setEditingTitle] = useState("");
 
     const [showChips, setShowChips] = useState(true);
     // 웰컴 메시지만 있으면 최초 대화 전 → 칩 항상 표시
@@ -183,6 +186,21 @@ export default function ChatFAB() {
                 : [getWelcomeMessage(meetingId)],
         );
         setShowHistory(false);
+    }
+
+    // 세션 이름 편집 시작
+    function handleStartRename(s: ChatSession) {
+        setEditingSessionId(s.session_id);
+        setEditingTitle(s.title || s.preview || "");
+    }
+
+    // 세션 이름 저장
+    async function handleSaveRename(sessionId: string) {
+        const title = editingTitle.trim();
+        if (!title) { setEditingSessionId(null); return; }
+        await renameChatSession(workspaceId, sessionId, title);
+        setSessions((prev) => prev.map((s) => s.session_id === sessionId ? { ...s, title } : s));
+        setEditingSessionId(null);
     }
 
     // 세션 삭제
@@ -274,7 +292,7 @@ export default function ChatFAB() {
                 },
             ]);
 
-            // 백엔드가 회의 선택을 요청하는 경우(past_summary + 선택 안내) → 선택 UI 재표시
+            // 백엔드가 회의 선택을 요청하는 경우(past_summary + 선택 안내) → 선택 UI 표시
             if (
                 (res.function_type === "past_summary" || res.function_type === "quick_report") &&
                 res.answer.includes("선택해주세요")
@@ -282,6 +300,18 @@ export default function ChatFAB() {
                 if (pastMeetings.length > 0) {
                     setPendingMessage(text);
                     setShowMeetingSelector(true);
+                } else {
+                    // 초기 로드 실패 시 재시도
+                    getPastMeetings(workspaceId)
+                        .then(({ meetings }) => {
+                            setPastMeetings(meetings);
+                            setPastMeetingsLoaded(true);
+                            if (meetings.length > 0) {
+                                setPendingMessage(text);
+                                setShowMeetingSelector(true);
+                            }
+                        })
+                        .catch(() => {});
                 }
             }
         } catch {
@@ -445,19 +475,52 @@ export default function ChatFAB() {
                                                         ? "bg-accent/10 text-accent"
                                                         : "hover:bg-muted text-foreground",
                                                 )}
-                                                onClick={() => void handleSelectSession(s.session_id)}
+                                                onClick={() => editingSessionId !== s.session_id && void handleSelectSession(s.session_id)}
                                             >
-                                                <p className="flex-1 text-xs truncate">{s.preview || "새 대화"}</p>
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        void handleDeleteSession(s.session_id);
-                                                    }}
-                                                    className="shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-red-500 transition-all p-0.5"
-                                                    aria-label="삭제"
-                                                >
-                                                    <Trash2 size={11} />
-                                                </button>
+                                                {editingSessionId === s.session_id ? (
+                                                    <input
+                                                        autoFocus
+                                                        value={editingTitle}
+                                                        onChange={(e) => setEditingTitle(e.target.value)}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === "Enter") void handleSaveRename(s.session_id);
+                                                            if (e.key === "Escape") setEditingSessionId(null);
+                                                        }}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        className="flex-1 text-xs bg-background border border-accent rounded px-1 py-0.5 outline-none min-w-0"
+                                                    />
+                                                ) : (
+                                                    <p className="flex-1 text-xs truncate">{s.title || s.preview || "새 대화"}</p>
+                                                )}
+                                                <div className="shrink-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all">
+                                                    {editingSessionId === s.session_id ? (
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); void handleSaveRename(s.session_id); }}
+                                                            className="text-accent hover:text-accent/80 p-0.5"
+                                                            aria-label="저장"
+                                                        >
+                                                            <Check size={11} />
+                                                        </button>
+                                                    ) : (
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); handleStartRename(s); }}
+                                                            className="text-muted-foreground hover:text-foreground p-0.5"
+                                                            aria-label="이름 변경"
+                                                        >
+                                                            <Pencil size={11} />
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            void handleDeleteSession(s.session_id);
+                                                        }}
+                                                        className="text-muted-foreground hover:text-red-500 p-0.5"
+                                                        aria-label="삭제"
+                                                    >
+                                                        <Trash2 size={11} />
+                                                    </button>
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
