@@ -28,6 +28,7 @@ export default function NewMeetingPage() {
   const [time, setTime] = useState('')
   const [duration, setDuration] = useState('60')
   const [meetingType, setMeetingType] = useState('')
+  const [submitting, setSubmitting] = useState(false)
   const [selectedParticipants, setSelectedParticipants] = useState<Participant[]>([])
   const [allParticipants, setAllParticipants] = useState<Participant[]>([])
   const [departments, setDepartments] = useState<WorkspaceDepartment[]>([])
@@ -260,6 +261,7 @@ export default function NewMeetingPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (submitting) return
     if (!date || !time) {
       alert('날짜와 시간을 선택해 주세요.')
       return
@@ -293,6 +295,7 @@ export default function NewMeetingPage() {
     const editId = editMeetingIdRef.current
 
     try {
+      setSubmitting(true)
       await apiRequest(
         editId
           ? `/meetings/workspaces/${workspaceId}/${editId}`
@@ -303,6 +306,7 @@ export default function NewMeetingPage() {
         },
       )
     } catch (err) {
+      setSubmitting(false)
       alert(`${editId ? '회의 수정' : '회의 생성'} 실패\n${err instanceof Error ? err.message : String(err)}`)
       return
     }
@@ -319,6 +323,7 @@ export default function NewMeetingPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
+        <fieldset disabled={submitting} className="space-y-5">
         {/* 회의 제목 */}
         <div>
           <label className="flex items-center gap-1.5 text-sm font-medium text-foreground mb-1.5">
@@ -647,17 +652,25 @@ export default function NewMeetingPage() {
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="flex-1 h-10 rounded-lg border border-border text-sm font-medium hover:bg-muted/50 transition-colors"
+            className="flex-1 h-10 rounded-lg border border-border text-sm font-medium hover:bg-muted/50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           >
             취소
           </button>
           <button
             type="submit"
-            className="flex-1 h-10 rounded-lg bg-accent text-accent-foreground text-sm font-medium hover:bg-accent/90 transition-colors"
+            className="flex-1 h-10 rounded-lg bg-accent text-accent-foreground text-sm font-medium hover:bg-accent/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            회의 생성
+            {submitting ? (
+              <span className="inline-flex items-center justify-center gap-2">
+                <span className="inline-block w-4 h-4 border-2 border-accent-foreground/30 border-t-accent-foreground rounded-full animate-spin" />
+                회의 생성중...
+              </span>
+            ) : (
+              '회의 생성'
+            )}
           </button>
         </div>
+        </fieldset>
       </form>
     </div>
   )

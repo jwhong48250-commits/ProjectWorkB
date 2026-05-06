@@ -39,7 +39,7 @@ export default function WeeklyStatsCard({ stats }: WeeklyStatsProps) {
       </div>
 
       {/* Action items progress */}
-      <div className="flex flex-col gap-2">
+      {/* <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between text-mini">
           <span className="flex items-center gap-1.5 text-muted-foreground">
             <CheckSquare size={12} />
@@ -58,7 +58,7 @@ export default function WeeklyStatsCard({ stats }: WeeklyStatsProps) {
         <span className="text-micro text-muted-foreground">
           {hasActions ? `${completionRate}% 완료` : '액션이 없습니다.'}
         </span>
-      </div>
+      </div> */}
     </div>
   )
 }
