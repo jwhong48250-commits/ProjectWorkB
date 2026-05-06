@@ -77,6 +77,14 @@ type PanelItem = {
 };
 
 const AUTO_SCROLL_THRESHOLD_PX = 64;
+const LEAVE_WARNING_MESSAGE =
+  "회의가 진행 중입니다. 이 페이지를 벗어나면 실시간 화면을 다시 열어야 합니다. 이동하시겠습니까?";
+
+type BrowserHistoryState = Record<string, unknown> & {
+  idx?: number;
+  key?: string;
+  __livePageLeaveGuard?: string;
+};
 
 export default function LivePage() {
   const { meetingId = "2" } = useParams();
@@ -118,6 +126,7 @@ export default function LivePage() {
   // Aux panel (search / screen / speakers) — null = closed
   const [auxPanel, setAuxPanel] = useState<AuxPanel>(null);
   const [isEndingMeeting, setIsEndingMeeting] = useState(false);
+  const skipLeaveWarningRef = useRef(false);
 
   const decisions: PanelItem[] = [];
   const actions: PanelItem[] = [];
@@ -128,6 +137,47 @@ export default function LivePage() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const scrollBottomRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
+
+  function navigateToMeetingNotes() {
+    skipLeaveWarningRef.current = true;
+    navigate(`/meetings/${meetingId}/notes`);
+  }
+
+  function confirmLeavePage() {
+    if (skipLeaveWarningRef.current) {
+      return true;
+    }
+
+    return window.confirm(LEAVE_WARNING_MESSAGE);
+  }
+
+  function pushLeaveGuardState() {
+    const currentState =
+      window.history.state && typeof window.history.state === "object"
+        ? (window.history.state as BrowserHistoryState)
+        : ({} as BrowserHistoryState);
+
+    if (currentState.__livePageLeaveGuard === meetingId) {
+      return;
+    }
+
+    window.history.pushState(
+      {
+        ...currentState,
+        idx:
+          typeof currentState.idx === "number"
+            ? currentState.idx + 1
+            : currentState.idx,
+        key:
+          typeof currentState.key === "string"
+            ? `${currentState.key}-leave-guard-${Date.now()}`
+            : `live-leave-guard-${meetingId}-${Date.now()}`,
+        __livePageLeaveGuard: meetingId,
+      },
+      "",
+      window.location.href,
+    );
+  }
 
   function updateAutoScrollState() {
     const container = scrollContainerRef.current;
@@ -147,9 +197,118 @@ export default function LivePage() {
   // 처리 완료 시 회의록 화면으로 자동 이동
   useEffect(() => {
     if (wsStatus === "done") {
-      navigate(`/meetings/${meetingId}/notes`);
+      navigateToMeetingNotes();
     }
   }, [wsStatus, meetingId, navigate]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (skipLeaveWarningRef.current) {
+        return;
+      }
+
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      if (skipLeaveWarningRef.current) {
+        return;
+      }
+
+      if (!confirmLeavePage()) {
+        pushLeaveGuardState();
+        return;
+      }
+
+      skipLeaveWarningRef.current = true;
+      window.history.back();
+    };
+
+    pushLeaveGuardState();
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [meetingId]);
+
+  useEffect(() => {
+    const handleDocumentClick = (event: MouseEvent) => {
+      if (skipLeaveWarningRef.current) {
+        return;
+      }
+
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.shiftKey
+      ) {
+        return;
+      }
+
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+
+      const anchor = target.closest("a");
+      if (!(anchor instanceof HTMLAnchorElement)) {
+        return;
+      }
+
+      if (
+        !anchor.href ||
+        anchor.target === "_blank" ||
+        anchor.hasAttribute("download")
+      ) {
+        return;
+      }
+
+      const nextUrl = new URL(anchor.href, window.location.href);
+      if (nextUrl.origin !== window.location.origin) {
+        return;
+      }
+
+      const currentRouteKey = `${window.location.pathname}${window.location.search}`;
+      const nextRouteKey = `${nextUrl.pathname}${nextUrl.search}`;
+      if (currentRouteKey === nextRouteKey) {
+        return;
+      }
+
+      if (!confirmLeavePage()) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        return;
+      }
+
+      skipLeaveWarningRef.current = true;
+      window.requestAnimationFrame(() => {
+        const latestRouteKey = `${window.location.pathname}${window.location.search}`;
+        if (latestRouteKey === currentRouteKey) {
+          skipLeaveWarningRef.current = false;
+        }
+      });
+    };
+
+    document.addEventListener("click", handleDocumentClick, true);
+
+    return () => {
+      document.removeEventListener("click", handleDocumentClick, true);
+    };
+  }, []);
 
   useEffect(() => {
     if (wsStatus === "error") {
@@ -502,7 +661,7 @@ export default function LivePage() {
             </button>
             {wsStatus === "done" ? (
               <button
-                onClick={() => navigate(`/meetings/${meetingId}/notes`)}
+                onClick={navigateToMeetingNotes}
                 className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-green-600 text-white text-mini font-medium hover:bg-green-700 transition-colors"
               >
                 <CheckCircle size={12} /> 회의록 보기
@@ -621,7 +780,7 @@ export default function LivePage() {
                   </p>
                 </div>
                 <button
-                  onClick={() => navigate(`/meetings/${meetingId}/notes`)}
+                  onClick={navigateToMeetingNotes}
                   className="shrink-0 flex items-center gap-1 h-7 px-3 rounded bg-green-600 text-white text-mini font-medium hover:bg-green-700 transition-colors"
                 >
                   회의록 보기
