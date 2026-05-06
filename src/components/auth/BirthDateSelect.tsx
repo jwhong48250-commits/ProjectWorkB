@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 
 interface BirthDateSelectProps {
   value: string
   onChange: (value: string) => void
+  compact?: boolean
 }
 
 interface PickerProps {
@@ -13,6 +15,7 @@ interface PickerProps {
   options: string[]
   formatLabel: (value: string) => string
   onChange: (value: string) => void
+  compact?: boolean
 }
 
 function pad(value: string): string {
@@ -24,22 +27,79 @@ function daysInMonth(year: string, month: string): number {
   return new Date(Number(year), Number(month), 0).getDate()
 }
 
-function Picker({ label, placeholder, value, options, formatLabel, onChange }: PickerProps) {
+function Picker({ label, placeholder, value, options, formatLabel, onChange, compact = false }: PickerProps) {
   const [open, setOpen] = useState(false)
+  const [menuRect, setMenuRect] = useState<DOMRect | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!open) return
 
     function handlePointerDown(event: PointerEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node
+      if (
+        !rootRef.current?.contains(target) &&
+        !menuRef.current?.contains(target)
+      ) {
         setOpen(false)
       }
     }
 
+    function updatePosition() {
+      const rect = rootRef.current?.getBoundingClientRect()
+      if (rect) setMenuRect(rect)
+    }
+
+    updatePosition()
     document.addEventListener('pointerdown', handlePointerDown)
-    return () => document.removeEventListener('pointerdown', handlePointerDown)
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
+    }
   }, [open])
+
+  function toggleOpen() {
+    const rect = rootRef.current?.getBoundingClientRect()
+    if (rect) setMenuRect(rect)
+    setOpen((next) => !next)
+  }
+
+  const menu = open && (
+    <div
+      ref={menuRef}
+      className={clsx(
+        'z-50 max-h-48 overflow-y-auto rounded-lg border border-border bg-card py-1 shadow-lg',
+        compact ? 'fixed' : 'absolute left-0 right-0 top-11',
+      )}
+      style={compact && menuRect ? {
+        left: menuRect.left,
+        top: menuRect.bottom + 4,
+        width: menuRect.width,
+      } : undefined}
+    >
+      {options.map((option) => (
+        <button
+          key={option}
+          type="button"
+          onClick={() => {
+            onChange(option)
+            setOpen(false)
+          }}
+          className={clsx(
+            'block w-full text-left transition-colors hover:bg-muted',
+            compact ? 'h-8 px-2 text-mini' : 'h-9 px-3 text-sm',
+            option === value ? 'bg-muted text-foreground font-medium' : 'text-muted-foreground',
+          )}
+        >
+          {formatLabel(option)}
+        </button>
+      ))}
+    </div>
+  )
 
   return (
     <div ref={rootRef} className="relative min-w-0">
@@ -47,40 +107,22 @@ function Picker({ label, placeholder, value, options, formatLabel, onChange }: P
         type="button"
         aria-label={label}
         aria-expanded={open}
-        onClick={() => setOpen((next) => !next)}
+        onClick={toggleOpen}
         className={clsx(
-          'flex h-10 w-full items-center justify-between rounded-lg border border-border bg-card px-3 text-left text-sm outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/30',
+          'flex w-full items-center justify-between rounded-lg border border-border bg-card text-left text-sm outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/30',
+          compact ? 'h-8 px-2 text-mini' : 'h-10 px-3',
           value ? 'text-foreground' : 'text-muted-foreground',
         )}
       >
-        <span className="truncate">{value ? formatLabel(value) : placeholder}</span>
+        <span className={compact ? 'whitespace-nowrap' : 'truncate'}>{value ? formatLabel(value) : placeholder}</span>
         <span className="ml-2 text-muted-foreground">⌄</span>
       </button>
-      {open && (
-        <div className="absolute left-0 right-0 top-11 z-50 max-h-48 overflow-y-auto rounded-lg border border-border bg-card py-1 shadow-lg">
-          {options.map((option) => (
-            <button
-              key={option}
-              type="button"
-              onClick={() => {
-                onChange(option)
-                setOpen(false)
-              }}
-              className={clsx(
-                'block h-9 w-full px-3 text-left text-sm transition-colors hover:bg-muted',
-                option === value ? 'bg-muted text-foreground font-medium' : 'text-muted-foreground',
-              )}
-            >
-              {formatLabel(option)}
-            </button>
-          ))}
-        </div>
-      )}
+      {compact && menu ? createPortal(menu, document.body) : menu}
     </div>
   )
 }
 
-export default function BirthDateSelect({ value, onChange }: BirthDateSelectProps) {
+export default function BirthDateSelect({ value, onChange, compact = false }: BirthDateSelectProps) {
   const [year, setYear] = useState(() => value.split('-')[0] ?? '')
   const [month, setMonth] = useState(() => value.split('-')[1] ?? '')
   const [day, setDay] = useState(() => value.split('-')[2] ?? '')
@@ -100,16 +142,25 @@ export default function BirthDateSelect({ value, onChange }: BirthDateSelectProp
   )
 
   useEffect(() => {
+    setYear(value.split('-')[0] ?? '')
+    setMonth(value.split('-')[1] ?? '')
+    setDay(value.split('-')[2] ?? '')
+  }, [value])
+
+  useEffect(() => {
     if (day && !days.includes(day)) {
       setDay(days[days.length - 1] ?? '')
       return
     }
 
-    onChange(year && month && day ? `${year}-${month}-${day}` : '')
-  }, [year, month, day, days, onChange])
+    const nextValue = year && month && day ? `${year}-${month}-${day}` : ''
+    if (nextValue !== value) {
+      onChange(nextValue)
+    }
+  }, [year, month, day, days, onChange, value])
 
   return (
-    <div className="grid grid-cols-[1.2fr_1fr_1fr] gap-2">
+    <div className={clsx('grid', compact ? 'grid-cols-[4.5rem_3.5rem_3.5rem] gap-1.5' : 'grid-cols-[1.2fr_1fr_1fr] gap-2')}>
       <Picker
         label="생년"
         placeholder="연도"
@@ -117,6 +168,7 @@ export default function BirthDateSelect({ value, onChange }: BirthDateSelectProp
         options={years}
         formatLabel={(item) => `${item}년`}
         onChange={setYear}
+        compact={compact}
       />
       <Picker
         label="생월"
@@ -125,6 +177,7 @@ export default function BirthDateSelect({ value, onChange }: BirthDateSelectProp
         options={months}
         formatLabel={(item) => `${Number(item)}월`}
         onChange={setMonth}
+        compact={compact}
       />
       <Picker
         label="생일"
@@ -133,6 +186,7 @@ export default function BirthDateSelect({ value, onChange }: BirthDateSelectProp
         options={days}
         formatLabel={(item) => `${Number(item)}일`}
         onChange={setDay}
+        compact={compact}
       />
     </div>
   )
