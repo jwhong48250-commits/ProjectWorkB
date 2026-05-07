@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Check, Unlink } from 'lucide-react'
+import clsx from 'clsx'
 import { getCurrentWorkspaceId } from '../../api/client'
 import {
   getIntegrations,
@@ -17,6 +18,7 @@ import {
   saveJiraMapping,
   getJiraSites,
   selectJiraSite,
+  testIntegration,
   type IntegrationItem,
   type ServiceName,
   type OAuthService,
@@ -24,6 +26,7 @@ import {
   type JiraSite,
   type SlackChannel,
   type GoogleCalendarItem,
+  type HealthStatus,
 } from '../../api/integrations'
 
 const OAUTH_SERVICES: OAuthService[] = ['google_calendar', 'slack', 'jira']
@@ -44,6 +47,7 @@ const WORKB_STATUS_LABELS: Record<string, string> = {
 
 export default function IntegrationsSettingsPage() {
   const [integrations, setIntegrations] = useState<IntegrationItem[]>([])
+  const [healthMap, setHealthMap] = useState<Partial<Record<ServiceName, HealthStatus>>>({})
   const [loading, setLoading] = useState(true)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [error, setError] = useState('')
@@ -80,6 +84,19 @@ export default function IntegrationsSettingsPage() {
     } else {
       setSlackChannels([])
     }
+
+    // 연결된 서비스만 헬스체크 (비동기 병렬 — UI 블로킹 없음)
+    const connected = response.integrations.filter((i) => i.is_connected)
+    if (connected.length === 0) return
+    const initial: Partial<Record<ServiceName, HealthStatus>> = {}
+    connected.forEach((i) => { initial[i.service] = 'loading' })
+    setHealthMap(initial)
+
+    connected.forEach((i) => {
+      testIntegration(workspaceId, i.service)
+        .then((res) => setHealthMap((prev) => ({ ...prev, [i.service]: res.status })))
+        .catch(() => setHealthMap((prev) => ({ ...prev, [i.service]: 'error' })))
+    })
   }
 
   async function openGoogleCalendarPicker() {
@@ -281,6 +298,7 @@ export default function IntegrationsSettingsPage() {
             onCalendarChange={openGoogleCalendarPicker}
             onJiraSetup={item.service === 'jira' && item.is_connected ? openJiraProjectPicker : undefined}
             onJiraResetLinks={item.service === 'jira' && item.is_connected ? handleJiraResetLinks : undefined}
+            healthStatus={item.is_connected ? healthMap[item.service] : undefined}
           />
         ))}
       </div>
@@ -505,6 +523,15 @@ export default function IntegrationsSettingsPage() {
   )
 }
 
+const HEALTH_BADGE: Record<string, { label: string; cls: string }> = {
+  loading:      { label: '확인 중...', cls: 'bg-muted text-muted-foreground animate-pulse' },
+  ok:           { label: '✓ 정상',    cls: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
+  expired:      { label: '⚠ 토큰 만료', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
+  revoked:      { label: '✕ 권한 해제', cls: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
+  disconnected: { label: '연결 안됨',  cls: 'bg-muted text-muted-foreground' },
+  error:        { label: '확인 실패',  cls: 'bg-muted text-muted-foreground' },
+}
+
 function IntegrationCard({
   item,
   onConnect,
@@ -518,6 +545,7 @@ function IntegrationCard({
   onCalendarChange,
   onJiraSetup,
   onJiraResetLinks,
+  healthStatus,
 }: {
   item: IntegrationItem
   onConnect: () => void
@@ -531,22 +559,37 @@ function IntegrationCard({
   onCalendarChange?: () => void
   onJiraSetup?: () => void
   onJiraResetLinks?: () => void
+  healthStatus?: HealthStatus
 }) {
   const meta = SERVICE_META[item.service]
   const isConnected = item.is_connected
+  const health = healthStatus ? HEALTH_BADGE[healthStatus] : null
 
   return (
-    <div className="p-4 rounded-xl border border-border bg-card">
+    <div className={clsx(
+      'p-4 rounded-xl border bg-card transition-colors',
+      healthStatus === 'expired' || healthStatus === 'revoked'
+        ? 'border-red-300 dark:border-red-800'
+        : 'border-border',
+    )}>
       <div className="flex items-start gap-3 mb-3">
         <span className="text-3xl">{meta.icon}</span>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-0.5">
+          <div className="flex items-center gap-2 mb-0.5 flex-wrap">
             <h3 className="text-sm font-semibold text-foreground">{meta.name}</h3>
             <span className={`px-2 py-0.5 rounded-full text-micro font-medium ${isConnected ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-muted text-muted-foreground'}`}>
               {isConnected ? '연결됨' : '연결 안됨'}
             </span>
+            {health && (
+              <span className={`px-2 py-0.5 rounded-full text-micro font-medium ${health.cls}`}>
+                {health.label}
+              </span>
+            )}
           </div>
           <p className="text-mini text-muted-foreground">{meta.description}</p>
+          {(healthStatus === 'expired' || healthStatus === 'revoked') && (
+            <p className="text-micro text-red-500 mt-1">재연동이 필요합니다.</p>
+          )}
         </div>
       </div>
 

@@ -3,6 +3,7 @@ import type { WbsStatus, WbsPriority } from '../types/wbs'
 
 export interface WbsTaskApi {
   id: number; epic_id: number; title: string
+  content: string | null
   assignee_id: number | null; assignee_name: string | null; priority: string
   urgency: string | null
   due_date: string | null; progress: number; status: string

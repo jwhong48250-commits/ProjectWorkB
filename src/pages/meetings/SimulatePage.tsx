@@ -3,7 +3,6 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Upload, FileAudio, Loader2, CheckCircle2 } from 'lucide-react'
 import { getCurrentWorkspaceId } from '../../utils/workspace'
 import { startWorkspaceMeeting, endWorkspaceMeeting } from '../../api/meetings'
-import { generateQuickReport } from '../../api/chatbot'
 
 const ASR_BASE =
   ((import.meta.env.VITE_ASR_SERVER as string | undefined) ?? 'http://localhost:8888')
@@ -65,9 +64,8 @@ export default function SimulatePage() {
         throw new Error(`ASR 서버 오류 (${res.status})${text ? `: ${text}` : ''}`)
       }
 
-      // 3. 회의 종료 + quick_report (라이브 종료 버튼과 동일한 순서)
+      // 3. 회의 종료 + LangGraph 후처리 파이프라인
       await endWorkspaceMeeting(workspaceId, Number(meetingId))
-      void generateQuickReport(workspaceId, Number(meetingId))
 
       setStatus('done')
       navigate(`/meetings/${meetingId}/notes`)

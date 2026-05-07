@@ -156,9 +156,10 @@ export function confirmPasswordReset(payload: ConfirmPasswordResetPayload): Prom
 
 export function getSocialOAuthUrl(
   provider: SocialProvider,
-  role: SocialLoginRole,
+  role?: SocialLoginRole,
 ): Promise<OAuthUrlResponse> {
-  return apiRequest<OAuthUrlResponse>(`/users/oauth/${provider}/auth?role=${role}`, {
+  const query = role ? `?role=${role}` : ''
+  return apiRequest<OAuthUrlResponse>(`/users/oauth/${provider}/auth${query}`, {
     skipAuthRefresh: true,
   })
 }
