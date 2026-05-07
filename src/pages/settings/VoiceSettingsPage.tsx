@@ -33,8 +33,20 @@ const ASR_BASE = (() => {
 const WORKLET_CODE = `
 class PCMCapture extends AudioWorkletProcessor {
   process(inputs) {
-    const ch = inputs[0] && inputs[0][0];
-    if (ch && ch.length > 0) this.port.postMessage(ch.slice());
+    const channels = inputs[0];
+    if (channels && channels.length > 0) {
+      const frameCount = channels[0].length;
+      const mixed = new Float32Array(frameCount);
+
+      for (let channelIndex = 0; channelIndex < channels.length; channelIndex++) {
+        const channel = channels[channelIndex];
+        for (let sampleIndex = 0; sampleIndex < frameCount; sampleIndex++) {
+          mixed[sampleIndex] += channel[sampleIndex] ?? 0;
+        }
+      }
+
+      this.port.postMessage(mixed);
+    }
     return true;
   }
 }
@@ -221,6 +233,7 @@ export default function VoiceSettingsPage() {
           echoCancellation: false,
           noiseSuppression: false,
           autoGainControl: false,
+          channelCount: { ideal: 2 },
         },
       });
 
