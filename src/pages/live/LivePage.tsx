@@ -840,34 +840,6 @@ export default function LivePage() {
         </aside>
       )}
 
-      {/* ── Main right panel (결정/액션/챗) ─────────────────────── */}
-      <aside className="hidden lg:flex flex-col w-72 xl:w-80 shrink-0 border-l border-border bg-card">
-        {/* Panel tabs */}
-        <div role="tablist" className="flex border-b border-border shrink-0">
-          {(
-            [
-              { id: "decisions", label: "결정", icon: CheckSquare },
-              { id: "actions", label: "액션", icon: Zap },
-            ] as const
-          ).map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              role="tab"
-              aria-selected={mainPanel === id}
-              onClick={() => setMainPanel(id)}
-              className={clsx(
-                "flex-1 flex items-center justify-center gap-1.5 py-2.5 text-mini font-medium transition-colors border-b-2",
-                mainPanel === id
-                  ? "border-accent text-accent"
-                  : "border-transparent text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <Icon size={13} /> {label}
-            </button>
-          ))}
-        </div>
-      </aside>
-
       {showEndingModal && (
         <div
           role="dialog"
