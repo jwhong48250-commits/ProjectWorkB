@@ -91,7 +91,8 @@ function Picker({ label, placeholder, value, options, formatLabel, onChange, com
           }}
           className={clsx(
             'block w-full text-left transition-colors hover:bg-muted',
-            compact ? 'h-8 px-2 text-mini' : 'h-9 px-3 text-sm',
+          compact ? 'h-8 px-2 text-mini' : 'h-9 px-3 text-sm',
+            compact ? 'text-center' : 'text-left',
             option === value ? 'bg-muted text-foreground font-medium' : 'text-muted-foreground',
           )}
         >
@@ -109,13 +110,14 @@ function Picker({ label, placeholder, value, options, formatLabel, onChange, com
         aria-expanded={open}
         onClick={toggleOpen}
         className={clsx(
-          'flex w-full items-center justify-between rounded-lg border border-border bg-card text-left text-sm outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/30',
+          'relative flex w-full items-center rounded-lg border border-border bg-card text-sm outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/30',
+          compact ? 'justify-center text-center' : 'justify-between text-left',
           compact ? 'h-8 px-2 text-mini' : 'h-10 px-3',
           value ? 'text-foreground' : 'text-muted-foreground',
         )}
       >
-        <span className={compact ? 'whitespace-nowrap' : 'truncate'}>{value ? formatLabel(value) : placeholder}</span>
-        <span className="ml-2 text-muted-foreground">⌄</span>
+        <span className={compact ? 'whitespace-nowrap text-center' : 'truncate'}>{value ? formatLabel(value) : placeholder}</span>
+        <span className={clsx('text-muted-foreground', compact ? 'absolute right-2' : 'ml-2')}>⌄</span>
       </button>
       {compact && menu ? createPortal(menu, document.body) : menu}
     </div>

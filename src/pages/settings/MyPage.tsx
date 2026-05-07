@@ -3,9 +3,10 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Building2, Check, Image as ImageIcon, KeyRound, Save, Trash2, Upload, UserRound, X } from 'lucide-react'
 import clsx from 'clsx'
 import { ApiError } from '../../api/client'
-import { updateMyProfile, withdrawMyAccount } from '../../api/auth'
+import { updateMyProfile, withdrawMyAccount, type Gender } from '../../api/auth'
 import { joinWorkspaceByInviteCode } from '../../api/workspace'
 import { useAuth } from '../../context/AuthContext'
+import BirthDateSelect from '../../components/auth/BirthDateSelect'
 import { useAccentColor, type AccentPreset } from '../../hooks/useAccentColor'
 import { useFontScale, type FontScale } from '../../context/FontScaleContext'
 import { getProfileImage, setProfileImage } from '../../utils/profileImage'
@@ -47,6 +48,9 @@ export default function MyPage() {
   } = useAccentColor()
 
   const [draftName, setDraftName] = useState(user?.name ?? '')
+  const [draftBirthDate, setDraftBirthDate] = useState(user?.birth_date ?? '')
+  const [draftPhoneNumber, setDraftPhoneNumber] = useState(user?.phone_number ?? '')
+  const [draftGender, setDraftGender] = useState<Gender | ''>(user?.gender ?? '')
   const [draftProfileImage, setDraftProfileImage] = useState('')
   const [draftFontScale, setDraftFontScale] = useState<FontScale>(fontScale)
   const [draftAccentPreset, setDraftAccentPreset] = useState<AccentPreset>(accentPreset)
@@ -68,6 +72,18 @@ export default function MyPage() {
   useEffect(() => {
     setDraftName(user?.name ?? '')
   }, [user?.name])
+
+  useEffect(() => {
+    setDraftBirthDate(user?.birth_date ?? '')
+  }, [user?.birth_date])
+
+  useEffect(() => {
+    setDraftPhoneNumber(user?.phone_number ?? '')
+  }, [user?.phone_number])
+
+  useEffect(() => {
+    setDraftGender(user?.gender ?? '')
+  }, [user?.gender])
 
   useEffect(() => {
     setDraftProfileImage(getProfileImage(profileImageUserId))
@@ -136,15 +152,25 @@ export default function MyPage() {
       return
     }
 
+    const nextPhoneNumber = draftPhoneNumber.trim()
+    const phoneDigits = nextPhoneNumber.replace(/\D/g, '')
+    if (nextPhoneNumber && (!/^[\d+\-\s()]+$/.test(nextPhoneNumber) || phoneDigits.length < 9 || phoneDigits.length > 15)) {
+      setError('전화번호는 숫자 기준 9자 이상 15자 이하로 입력해주세요.')
+      return
+    }
+
     setSaving(true)
     try {
       let savedName = nextName
 
-      if (user?.name !== nextName) {
-        const response = await updateMyProfile({ name: nextName })
-        saveUser(response.user)
-        savedName = response.user.name
-      }
+      const response = await updateMyProfile({
+        name: nextName,
+        birth_date: draftBirthDate || null,
+        phone_number: nextPhoneNumber || null,
+        gender: draftGender || null,
+      })
+      saveUser(response.user)
+      savedName = response.user.name
 
       setProfileImage(profileImageUserId, draftProfileImage)
 
@@ -296,6 +322,70 @@ export default function MyPage() {
               }}
               className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
             />
+          </div>
+
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-foreground">
+                생년월일
+              </label>
+              <BirthDateSelect value={draftBirthDate} onChange={(value) => {
+                setDraftBirthDate(value)
+                setMessage('')
+              }} />
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-foreground" htmlFor="profile-phone">
+                전화번호
+              </label>
+              <input
+                id="profile-phone"
+                type="tel"
+                value={draftPhoneNumber}
+                onChange={(event) => {
+                  setDraftPhoneNumber(event.target.value)
+                  setMessage('')
+                }}
+                placeholder="010-1234-5678"
+                className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
+              />
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <label className="mb-1.5 block text-sm font-medium text-foreground">
+              성별
+            </label>
+            <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="성별">
+              {[
+                { value: 'female', label: '여성' },
+                { value: 'male', label: '남성' },
+              ].map((option) => (
+                <label
+                  key={option.value}
+                  className={clsx(
+                    'flex h-10 cursor-pointer items-center justify-center rounded-lg border text-sm font-medium transition-colors',
+                    draftGender === option.value
+                      ? 'border-accent bg-accent text-accent-foreground'
+                      : 'border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground',
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="profile-gender"
+                    value={option.value}
+                    checked={draftGender === option.value}
+                    onChange={() => {
+                      setDraftGender(option.value as Gender)
+                      setMessage('')
+                    }}
+                    className="sr-only"
+                  />
+                  {option.label}
+                </label>
+              ))}
+            </div>
           </div>
         </div>
 
