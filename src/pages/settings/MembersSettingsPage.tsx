@@ -42,7 +42,7 @@ const GENDER_OPTIONS: { value: Gender; label: string }[] = [
   { value: 'female', label: '여성' },
   { value: 'male', label: '남성' },
 ]
-const DESKTOP_MEMBER_GRID = 'md:grid-cols-[minmax(14rem,1fr)_6rem_8.5rem_12rem_4rem_6rem_6rem] md:min-w-[60rem]'
+const DESKTOP_MEMBER_GRID = 'md:grid-cols-[minmax(14rem,1fr)_6rem_8.5rem_13rem_4rem_6rem_6rem] md:min-w-[61rem]'
 
 function getAvatarColor(userId: number): string {
   return AVATAR_COLORS[userId % AVATAR_COLORS.length]
@@ -58,6 +58,14 @@ function formatAge(age: number | null): string {
 
 function genderLabel(gender: WorkspaceMember['gender']): string {
   return GENDER_OPTIONS.find((option) => option.value === gender)?.label ?? '-'
+}
+
+function getSettingsErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof TypeError && err.message === 'Failed to fetch') {
+    return '서버 연결에 실패했습니다. 백엔드 서버 실행 상태를 확인해 주세요.'
+  }
+
+  return err instanceof Error ? err.message : fallback
 }
 
 function MemberAvatar({ member, className }: { member: WorkspaceMember; className?: string }) {
@@ -113,7 +121,7 @@ export default function MembersSettingsPage() {
         setDepartments(departmentList)
       } catch (err) {
         if (!active) return
-        setError(err instanceof Error ? err.message : '멤버 정보를 불러오지 못했습니다.')
+        setError(getSettingsErrorMessage(err, '멤버 정보를 불러오지 못했습니다.'))
       } finally {
         if (active) setLoading(false)
       }
@@ -140,7 +148,7 @@ export default function MembersSettingsPage() {
       await updateMemberRole(workspaceId, userId, backendRole)
       setMembers((prev) => prev.map((m) => m.user_id === userId ? { ...m, role: backendRole } : m))
     } catch (err) {
-      setError(err instanceof Error ? err.message : '역할 변경에 실패했습니다.')
+      setError(getSettingsErrorMessage(err, '역할 변경에 실패했습니다.'))
     }
   }
 
@@ -155,7 +163,7 @@ export default function MembersSettingsPage() {
           : m
       )))
     } catch (err) {
-      setError(err instanceof Error ? err.message : '부서 변경에 실패했습니다.')
+      setError(getSettingsErrorMessage(err, '부서 변경에 실패했습니다.'))
     }
   }
 
@@ -166,13 +174,22 @@ export default function MembersSettingsPage() {
     const member = members.find((item) => item.user_id === userId)
     if (!member) return
     setError('')
-
     const nextBirthDate = Object.prototype.hasOwnProperty.call(patch, 'birth_date')
       ? patch.birth_date ?? null
       : member.birth_date
     const nextGender = Object.prototype.hasOwnProperty.call(patch, 'gender')
       ? patch.gender ?? null
       : member.gender
+
+    if (nextBirthDate === member.birth_date && nextGender === member.gender) {
+      return
+    }
+
+    setMembers((prev) => prev.map((m) => (
+      m.user_id === userId
+        ? { ...m, birth_date: nextBirthDate, gender: nextGender }
+        : m
+    )))
 
     try {
       const updated = await updateMemberProfile(workspaceId, userId, {
@@ -185,7 +202,7 @@ export default function MembersSettingsPage() {
           : m
       )))
     } catch (err) {
-      setError(err instanceof Error ? err.message : '멤버 정보 변경에 실패했습니다.')
+      setError(getSettingsErrorMessage(err, '멤버 정보 변경에 실패했습니다.'))
     }
   }
 
@@ -197,7 +214,7 @@ export default function MembersSettingsPage() {
       const issued = await issueInviteCode(workspaceId)
       setInviteCode(issued.invite_code)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '초대코드 발급에 실패했습니다.')
+      setError(getSettingsErrorMessage(err, '초대코드 발급에 실패했습니다.'))
     } finally {
       setIssuingInvite(false)
     }
@@ -253,7 +270,7 @@ export default function MembersSettingsPage() {
       </div>
 
       {/* Member table */}
-      <div className="rounded-lg border border-border overflow-x-auto bg-card">
+      <div className="select-none rounded-lg border border-border overflow-x-auto bg-card">
         {/* Table header — desktop only */}
         <div className={`hidden md:grid ${DESKTOP_MEMBER_GRID} gap-3 px-4 py-2 bg-muted/40 border-b border-border text-center text-micro font-medium text-muted-foreground uppercase tracking-wide`}>
           <span>멤버</span>
@@ -298,7 +315,7 @@ export default function MembersSettingsPage() {
                   ))}
                 </select>
                 <select
-                  value={member.gender ?? undefined}
+                  value={member.gender ?? ''}
                   onChange={(e) => changeMemberProfile(member.user_id, { gender: e.target.value as Gender })}
                   className="h-9 rounded border border-border bg-card px-2 text-mini outline-none"
                   aria-label="성별 변경"
@@ -357,7 +374,7 @@ export default function MembersSettingsPage() {
               />
               <span className="text-center text-mini text-muted-foreground whitespace-nowrap">{formatAge(member.age)}</span>
               <select
-                value={member.gender ?? undefined}
+                  value={member.gender ?? ''}
                 onChange={(e) => changeMemberProfile(member.user_id, { gender: e.target.value as Gender })}
                 className="h-8 w-full rounded border border-border bg-card px-2 text-center text-mini outline-none cursor-pointer hover:border-foreground transition-colors"
                 aria-label="성별 변경"

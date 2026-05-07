@@ -47,7 +47,7 @@ export default function AppShell() {
           onMenuOpen={() => setMobileOpen(true)}
           onLogout={handleLogout}
         />
-        <main id="main" className="flex-1 overflow-y-auto">
+        <main id="main" className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <Outlet />
         </main>
       </div>

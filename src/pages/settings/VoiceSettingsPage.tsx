@@ -6,6 +6,7 @@ import {
   type SpeakerProfileItem,
 } from "../../api/speakerProfiles";
 import { useAuth } from "../../context/AuthContext";
+import { useProfileImage } from "../../utils/profileImage";
 
 const TARGET_SAMPLE_RATE = 16000;
 const PREPARE_COUNTDOWN_SECONDS = 5;
@@ -99,6 +100,31 @@ function getAvatarColor(userId: number): string {
     "#14b8a6",
   ];
   return colors[userId % colors.length];
+}
+
+function SpeakerAvatar({ profile }: { profile: SpeakerProfileItem }) {
+  const profileImage = useProfileImage(profile.user_id);
+
+  if (profileImage) {
+    return (
+      <img
+        src={profileImage}
+        alt={profile.name}
+        className="h-9 w-9 shrink-0 rounded-full object-cover"
+      />
+    );
+  }
+
+  return (
+    <div
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
+      style={{
+        backgroundColor: getAvatarColor(profile.user_id),
+      }}
+    >
+      {getInitial(profile.name)}
+    </div>
+  );
 }
 
 export default function VoiceSettingsPage() {
@@ -413,14 +439,7 @@ export default function VoiceSettingsPage() {
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                   <div className="flex min-w-0 flex-1 items-center gap-3">
-                    <div
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
-                      style={{
-                        backgroundColor: getAvatarColor(profile.user_id),
-                      }}
-                    >
-                      {getInitial(profile.name)}
-                    </div>
+                    <SpeakerAvatar profile={profile} />
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-foreground">
                         {profile.name}

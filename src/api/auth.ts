@@ -5,6 +5,7 @@ import {
   syncStoredUserFromToken,
   type StoredUser,
 } from './client'
+import { getApiOrigin } from './baseUrl'
 
 export interface LoginPayload {
   email: string
@@ -193,6 +194,20 @@ export async function updateMyProfile(payload: UserProfileUpdatePayload): Promis
   setAuthTokens(response.access_token, response.refresh_token)
   syncStoredUserFromToken(response.user)
   return response
+}
+
+export async function uploadMyProfileImage(file: File): Promise<{ image_url: string }> {
+  const formData = new FormData()
+  formData.append('file', file)
+  const response = await apiRequest<{ image_url: string }>('/users/me/profile-image', {
+    method: 'POST',
+    body: formData,
+  })
+  return {
+    image_url: response.image_url.startsWith('http')
+      ? response.image_url
+      : `${getApiOrigin()}${response.image_url}`,
+  }
 }
 
 export function getMyDeviceSettings(): Promise<DeviceSettingsResponse> {

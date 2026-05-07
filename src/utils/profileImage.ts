@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { removeWorkspaceLogosMatching } from './workspaceLogo'
 
 export const PROFILE_IMAGE_CHANGED_EVENT = 'workb-profile-image-changed'
 
@@ -8,11 +9,11 @@ function getProfileImageKey(userId: number | undefined): string {
 
 export function getProfileImage(userId: number | undefined): string {
   const key = getProfileImageKey(userId)
-  const stored = sessionStorage.getItem(key) ?? localStorage.getItem(key)
+  const stored = localStorage.getItem(key) ?? sessionStorage.getItem(key)
 
   if (stored) {
-    sessionStorage.setItem(key, stored)
-    localStorage.removeItem(key)
+    localStorage.setItem(key, stored)
+    sessionStorage.removeItem(key)
   }
 
   return stored ?? ''
@@ -22,12 +23,13 @@ export function setProfileImage(userId: number | undefined, profileImage: string
   const key = getProfileImageKey(userId)
 
   if (profileImage) {
-    sessionStorage.setItem(key, profileImage)
+    localStorage.setItem(key, profileImage)
+    removeWorkspaceLogosMatching(profileImage)
   } else {
-    sessionStorage.removeItem(key)
+    localStorage.removeItem(key)
   }
 
-  localStorage.removeItem(key)
+  sessionStorage.removeItem(key)
   window.dispatchEvent(
     new CustomEvent(PROFILE_IMAGE_CHANGED_EVENT, {
       detail: { userId, profileImage },
