@@ -1,4 +1,4 @@
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, useLocation, Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import {
   Share2,
@@ -66,8 +66,11 @@ const INITIAL_VISIBLE_UTTERANCES = 5;
 export default function NotesPage() {
   const { meetingId } = useParams();
   const navigate = useNavigate();
-  const [meeting, setMeeting] = useState<Meeting | null>(null);
-  const [meetingLoading, setMeetingLoading] = useState(true);
+  const location = useLocation();
+  const passedMeeting =
+    (location.state as { meeting?: Meeting } | null)?.meeting ?? null;
+  const [meeting, setMeeting] = useState<Meeting | null>(passedMeeting);
+  const [meetingLoading, setMeetingLoading] = useState(passedMeeting === null);
 
   const [utterances, setUtterances] = useState<UtteranceItem[]>([]);
   const [utterancesLoading, setUtterancesLoading] = useState(true);
@@ -101,7 +104,7 @@ export default function NotesPage() {
   );
 
   useEffect(() => {
-    if (!meetingId) return;
+    if (!meetingId || passedMeeting !== null) return;
     const wsId = getCurrentWorkspaceId();
     if (!wsId) return;
     fetchWorkspaceMeetingDetail(wsId, Number(meetingId))

@@ -119,10 +119,12 @@ export default function LivePage() {
   // Aux panel (search / screen / speakers) — null = closed
   const [auxPanel, setAuxPanel] = useState<AuxPanel>(null);
   const [isEndingMeeting, setIsEndingMeeting] = useState(false);
+  const [pendingNavigateToNotes, setPendingNavigateToNotes] = useState(false);
   const skipLeaveWarningRef = useRef(false);
 
   const displaySegments = diarization;
-  const showEndingModal = isEndingMeeting && wsStatus !== "error";
+  const showEndingModal =
+    (isEndingMeeting && wsStatus !== "error") || pendingNavigateToNotes;
 
   // 자동 스크롤
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -131,7 +133,7 @@ export default function LivePage() {
 
   function navigateToMeetingNotes() {
     skipLeaveWarningRef.current = true;
-    navigate(`/meetings/${meetingId}/notes`);
+    setPendingNavigateToNotes(true);
   }
 
   function confirmLeavePage() {
@@ -294,16 +296,50 @@ export default function LivePage() {
     scrollBottomRef.current?.scrollIntoView({ block: "end" });
   }, [displaySegments, liveText]);
 
-  // 처리 완료 시 백엔드 종료 처리 후 회의록 화면으로 이동
+  // 처리 완료 시 백엔드 종료 처리 후 요약 생성 대기 후 회의록 화면으로 이동
   useEffect(() => {
     if (wsStatus === "done") {
       if (isEndingMeeting) {
         const workspaceId = getCurrentWorkspaceId();
         void endWorkspaceMeeting(workspaceId, Number(meetingId));
       }
-      navigate(`/meetings/${meetingId}/notes`);
+      setPendingNavigateToNotes(true);
     }
-  }, [wsStatus, isEndingMeeting, meetingId, navigate]);
+  }, [wsStatus, isEndingMeeting, meetingId]);
+
+  // summary 생성 대기 폴링: 최대 90초(10회×10초), summary 확인되면 즉시 이동
+  useEffect(() => {
+    if (!pendingNavigateToNotes) return;
+    const workspaceId = getCurrentWorkspaceId();
+    let cancelled = false;
+
+    async function pollAndGo() {
+      for (let i = 0; i < 10; i++) {
+        if (cancelled) return;
+        try {
+          const detail = await fetchWorkspaceMeetingDetail(
+            workspaceId,
+            Number(meetingId),
+          );
+          if (detail?.summary) {
+            navigate(`/meetings/${meetingId}/notes`, {
+              state: { meeting: detail },
+            });
+            return;
+          }
+        } catch {
+          // ignore fetch errors, keep polling
+        }
+        if (i < 9) await new Promise<void>((r) => setTimeout(r, 10000));
+      }
+      if (!cancelled) navigate(`/meetings/${meetingId}/notes`);
+    }
+
+    void pollAndGo();
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingNavigateToNotes, meetingId, navigate]);
 
   useEffect(() => {
     if (wsStatus === "error") {
@@ -858,8 +894,8 @@ export default function LivePage() {
                 id="meeting-ending-title"
                 className="text-sm font-semibold text-foreground"
               >
-                {wsStatus === "done"
-                  ? "회의록 화면으로 이동 중입니다"
+                {pendingNavigateToNotes
+                  ? "회의 요약 생성 중..."
                   : "회의 종료를 처리하고 있습니다"}
               </h2>
             </div>
@@ -868,8 +904,8 @@ export default function LivePage() {
                 다음 화면으로 넘어갈 때까지 잠시만 기다려주세요.
               </p>
               <p className="mt-2 text-mini text-muted-foreground leading-5">
-                {wsStatus === "done"
-                  ? "최종 회의록 화면으로 자동 이동하고 있습니다."
+                {pendingNavigateToNotes
+                  ? "AI가 회의 내용을 분석하고 있습니다. 완료되면 자동으로 이동합니다."
                   : "회의 종료 신호를 전송하고 후처리를 준비하고 있습니다."}
               </p>
             </div>
