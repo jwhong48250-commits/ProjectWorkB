@@ -7,6 +7,17 @@ vi.mock('../../api/auth', () => ({
   getSocialOAuthUrl: vi.fn(),
   login: vi.fn(),
   logout: vi.fn(),
+  signupAdmin: vi.fn(),
+  signupMember: vi.fn(),
+}))
+
+vi.mock('../../api/client', () => ({
+  ApiError: class ApiError extends Error {},
+  setCurrentWorkspaceId: vi.fn(),
+}))
+
+vi.mock('../../api/workspace', () => ({
+  validateInviteCode: vi.fn(),
 }))
 
 const mockRefreshSession = vi.hoisted(() => vi.fn())
@@ -20,6 +31,7 @@ vi.mock('../../context/AuthContext', () => ({
 }))
 
 import LoginPage from '../../pages/auth/LoginPage'
+import SignupPage from '../../pages/auth/SignupPage'
 import { getSocialOAuthUrl, login } from '../../api/auth'
 
 function renderLoginPage(initialPath = '/login') {
@@ -27,6 +39,7 @@ function renderLoginPage(initialPath = '/login') {
     <MemoryRouter initialEntries={[initialPath]}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
         <Route path="/" element={<div>홈 페이지</div>} />
       </Routes>
     </MemoryRouter>,
@@ -85,35 +98,32 @@ describe('로그인 플로우 통합 테스트', () => {
     })
   })
 
-  describe('멤버 탭', () => {
-    it('멤버 탭으로 전환하면 회원가입 링크가 변경됩니다', async () => {
+  describe('회원가입 진입', () => {
+    it('로그인 화면에서 멤버/관리자 회원가입 링크를 표시합니다', async () => {
       renderLoginPage()
-      await userEvent.click(screen.getByRole('tab', { name: '멤버' }))
-      expect(screen.getByText('멤버 회원가입')).toBeInTheDocument()
+
+      expect(screen.getByRole('link', { name: '멤버/관리자 회원가입' })).toHaveAttribute('href', '/signup')
     })
 
-    it('멤버 탭에서 관리자 계정으로 로그인하면 에러가 표시됩니다', async () => {
-      vi.mocked(login).mockResolvedValueOnce({
-        access_token: 'fake-token',
-        refresh_token: 'fake-refresh',
-        token_type: 'bearer',
-      })
-      mockRefreshSession.mockResolvedValueOnce({ id: 'u1', email: 'admin@test.com', role: 'admin' })
+    it('회원가입 화면은 기본으로 멤버 가입 폼을 표시합니다', async () => {
+      renderLoginPage('/signup')
 
-      renderLoginPage()
-      await userEvent.click(screen.getByRole('tab', { name: '멤버' }))
-      await userEvent.type(screen.getByLabelText('이메일'), 'admin@test.com')
-      await userEvent.type(screen.getByLabelText('비밀번호'), 'Admin1234')
-      await userEvent.click(screen.getByRole('button', { name: '로그인' }))
+      expect(screen.getByRole('heading', { name: '멤버 회원가입' })).toBeInTheDocument()
+      expect(screen.getByPlaceholderText('WORKB-XXXXXX')).toBeInTheDocument()
+    })
 
-      await waitFor(() => {
-        expect(screen.getByText('멤버 계정으로 로그인해주세요.')).toBeInTheDocument()
-      })
+    it('회원가입 화면에서 관리자 탭으로 전환할 수 있습니다', async () => {
+      renderLoginPage('/signup')
+
+      await userEvent.click(screen.getByRole('tab', { name: '관리자' }))
+
+      expect(screen.getByRole('heading', { name: '관리자 회원가입' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /워크스페이스 생성/ })).toBeInTheDocument()
     })
   })
 
   describe('소셜 로그인', () => {
-    it('관리자 탭에서 Google 소셜 로그인 URL로 이동합니다', async () => {
+    it('Google 소셜 로그인 URL로 이동합니다', async () => {
       vi.mocked(getSocialOAuthUrl).mockResolvedValueOnce({
         auth_url: '#google-oauth',
       })
@@ -123,22 +133,21 @@ describe('로그인 플로우 통합 테스트', () => {
       await userEvent.click(screen.getByRole('button', { name: /Google로 계속하기/ }))
 
       await waitFor(() => {
-        expect(getSocialOAuthUrl).toHaveBeenCalledWith('google', 'admin')
+        expect(getSocialOAuthUrl).toHaveBeenCalledWith('google')
       })
       expect(window.location.hash).toBe('#google-oauth')
     })
 
-    it('멤버 탭에서 카카오 소셜 로그인 URL을 요청합니다', async () => {
+    it('카카오 소셜 로그인 URL을 요청합니다', async () => {
       vi.mocked(getSocialOAuthUrl).mockResolvedValueOnce({
         auth_url: '#kakao-oauth',
       })
 
       renderLoginPage()
-      await userEvent.click(screen.getByRole('tab', { name: '멤버' }))
       await userEvent.click(screen.getByRole('button', { name: /카카오로 계속하기/ }))
 
       await waitFor(() => {
-        expect(getSocialOAuthUrl).toHaveBeenCalledWith('kakao', 'member')
+        expect(getSocialOAuthUrl).toHaveBeenCalledWith('kakao')
       })
     })
   })

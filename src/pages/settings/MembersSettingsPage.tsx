@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { UserPlus, Copy, Check, MoreVertical, Shield } from 'lucide-react'
+import { UserPlus, Copy, Check, Shield } from 'lucide-react'
 import { getCurrentWorkspaceId } from '../../api/client'
 import {
   getDepartments,
@@ -92,6 +92,7 @@ export default function MembersSettingsPage() {
   const [copied, setCopied] = useState(false)
   const [issuingInvite, setIssuingInvite] = useState(false)
   const workspaceId = getCurrentWorkspaceId()
+  const adminCount = members.filter((member) => member.role === 'admin').length
 
   useEffect(() => {
     let active = true
@@ -309,8 +310,10 @@ export default function MembersSettingsPage() {
                 <select
                   value={BACKEND_TO_ROLE[member.role]}
                   onChange={(e) => changeRole(member.user_id, e.target.value as Role)}
-                  className="h-9 rounded border border-border bg-card px-2 text-mini outline-none"
+                  disabled={member.role === 'admin' && adminCount <= 1}
+                  className="h-9 rounded border border-border bg-card px-2 text-mini outline-none disabled:cursor-not-allowed disabled:opacity-60"
                   aria-label="권한 변경"
+                  title={member.role === 'admin' && adminCount <= 1 ? '워크스페이스에는 최소 1명의 관리자가 필요합니다.' : undefined}
                 >
                   {(['관리자', '멤버', '뷰어'] as Role[]).map((r) => (
                     <option key={r} value={r}>{r}</option>
@@ -328,60 +331,53 @@ export default function MembersSettingsPage() {
                   <p className="text-mini text-muted-foreground">{member.email}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center justify-center gap-1.5">
                 {member.role === 'admin' && <Shield size={12} className="text-accent" />}
                 <span className={`px-2 py-0.5 rounded-full text-mini font-medium ${ROLE_STYLES[BACKEND_TO_ROLE[member.role]]}`}>
                   {BACKEND_TO_ROLE[member.role]}
                 </span>
               </div>
-              <div className="relative">
-                <select
-                  value={member.department_id ?? ''}
-                  onChange={(e) => changeDepartment(member.user_id, e.target.value ? Number(e.target.value) : null)}
-                  className="appearance-none h-7 px-2 pr-5 rounded border border-border bg-card text-mini outline-none cursor-pointer hover:border-foreground transition-colors min-w-[7rem]"
-                  aria-label="부서 변경"
-                >
-                  <option value="">부서 없음</option>
-                  {departments.map((department) => (
-                    <option key={department.department_id} value={department.department_id}>
-                      {department.name}
-                    </option>
-                  ))}
-                </select>
-                <MoreVertical size={12} className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-              </div>
+              <select
+                value={member.department_id ?? ''}
+                onChange={(e) => changeDepartment(member.user_id, e.target.value ? Number(e.target.value) : null)}
+                className="h-8 w-full rounded border border-border bg-card px-2 text-center text-mini outline-none cursor-pointer hover:border-foreground transition-colors"
+                aria-label="부서 변경"
+              >
+                <option value="">부서 없음</option>
+                {departments.map((department) => (
+                  <option key={department.department_id} value={department.department_id}>
+                    {department.name}
+                  </option>
+                ))}
+              </select>
               <BirthDateSelect
                 value={member.birth_date ?? ''}
                 onChange={(value) => changeMemberProfile(member.user_id, { birth_date: value || null })}
                 compact
               />
-              <span className="text-mini text-muted-foreground whitespace-nowrap">{formatAge(member.age)}</span>
-              <div className="relative">
-                <select
-                  value={member.gender ?? undefined}
-                  onChange={(e) => changeMemberProfile(member.user_id, { gender: e.target.value as Gender })}
-                  className="appearance-none h-7 px-2 pr-5 rounded border border-border bg-card text-mini outline-none cursor-pointer hover:border-foreground transition-colors"
-                  aria-label="성별 변경"
-                >
-                  {GENDER_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-                <MoreVertical size={12} className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-              </div>
-              <div className="relative">
-                <select
-                  value={BACKEND_TO_ROLE[member.role]}
-                  onChange={(e) => changeRole(member.user_id, e.target.value as Role)}
-                  className="appearance-none h-7 px-2 pr-5 rounded border border-border bg-card text-mini outline-none cursor-pointer hover:border-foreground transition-colors"
-                  aria-label="역할 변경"
-                >
-                  {(['관리자', '멤버', '뷰어'] as Role[]).map((r) => (
-                    <option key={r} value={r}>{r}</option>
-                  ))}
-                </select>
-                <MoreVertical size={12} className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-              </div>
+              <span className="text-center text-mini text-muted-foreground whitespace-nowrap">{formatAge(member.age)}</span>
+              <select
+                value={member.gender ?? undefined}
+                onChange={(e) => changeMemberProfile(member.user_id, { gender: e.target.value as Gender })}
+                className="h-8 w-full rounded border border-border bg-card px-2 text-center text-mini outline-none cursor-pointer hover:border-foreground transition-colors"
+                aria-label="성별 변경"
+              >
+                {GENDER_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+              <select
+                value={BACKEND_TO_ROLE[member.role]}
+                onChange={(e) => changeRole(member.user_id, e.target.value as Role)}
+                disabled={member.role === 'admin' && adminCount <= 1}
+                className="h-8 w-full rounded border border-border bg-card px-2 text-center text-mini outline-none cursor-pointer hover:border-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label="역할 변경"
+                title={member.role === 'admin' && adminCount <= 1 ? '워크스페이스에는 최소 1명의 관리자가 필요합니다.' : undefined}
+              >
+                {(['관리자', '멤버', '뷰어'] as Role[]).map((r) => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
             </div>
           </div>
         ))}
