@@ -19,6 +19,17 @@ function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
 }
 
+function parseSummaryPreview(raw: string | null | undefined): string {
+  if (!raw) return ''
+  try {
+    const parsed = JSON.parse(raw)
+    const points: string[] = parsed.key_points ?? []
+    return points.slice(0, 2).join(' ・ ')
+  } catch {
+    return raw
+  }
+}
+
 export default function MeetingSelectPage() {
   const navigate = useNavigate()
   const { pathname } = useLocation()
@@ -113,7 +124,7 @@ export default function MeetingSelectPage() {
                     {meeting.title}
                   </p>
                   {meeting.summary && (
-                    <p className="text-mini text-muted-foreground mt-0.5 line-clamp-1">{meeting.summary}</p>
+                    <p className="text-mini text-muted-foreground mt-0.5 line-clamp-1">{parseSummaryPreview(meeting.summary)}</p>
                   )}
                   <div className="flex items-center gap-3 mt-2 text-mini text-muted-foreground">
                     <span className="flex items-center gap-1">

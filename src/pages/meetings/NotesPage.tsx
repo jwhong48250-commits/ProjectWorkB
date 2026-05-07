@@ -1,7 +1,6 @@
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import {
-    Edit2,
     Share2,
     AlertCircle,
     MessageSquare,

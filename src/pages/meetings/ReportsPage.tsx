@@ -235,7 +235,6 @@ function MinutesTab({
         generating={generating}
         onRegenerate={handleGenerate}
         onRefresh={(fv) => handlePdfPreview(fv)}
-        onGeneratePreview={() => handlePdfPreview()}
         onDownload={handlePdfDownload}
       />
 
@@ -266,7 +265,6 @@ function PdfOverlayEditor({
   generating,
   onRegenerate,
   onRefresh,
-  onGeneratePreview,
   onDownload,
 }: {
   pdfPreview: MinutesPdfPreview | null
@@ -274,7 +272,6 @@ function PdfOverlayEditor({
   generating: boolean
   onRegenerate: () => void
   onRefresh: (fieldValues: Record<string, string>) => void
-  onGeneratePreview: () => void
   onDownload: () => void
 }) {
   const [editValues, setEditValues] = useState<Record<string, string>>({})
@@ -362,14 +359,6 @@ function PdfOverlayEditor({
               <Download size={11} /> PDF 다운로드
             </button>
           )}
-          {!pdfPreview && !loading && (
-            <button
-              onClick={onGeneratePreview}
-              className="flex items-center gap-1 h-7 px-2.5 rounded border border-accent/40 text-mini text-accent hover:bg-accent/10 transition-colors"
-            >
-              <Sparkles size={11} /> PDF 생성
-            </button>
-          )}
           <button
             onClick={onRegenerate}
             disabled={generating}
@@ -377,7 +366,9 @@ function PdfOverlayEditor({
           >
             {generating
               ? <><Loader2 size={11} className="animate-spin" /> 생성 중...</>
-              : <><RefreshCw size={11} /> 회의록 재생성</>}
+              : pdfPreview
+                ? <><RefreshCw size={11} /> 회의록 재생성</>
+                : <><Sparkles size={11} /> 회의록 생성</>}
           </button>
           {loading && (
             <span className="flex items-center gap-1 text-mini text-muted-foreground">
@@ -391,7 +382,7 @@ function PdfOverlayEditor({
       {!pdfPreview && !loading && (
         <div className="px-5 py-10 text-center">
           <FileText size={32} className="mx-auto mb-3 text-muted-foreground/40" />
-          <p className="text-sm text-muted-foreground">회의록을 생성한 뒤 'PDF 생성' 버튼을 누르세요.</p>
+          <p className="text-sm text-muted-foreground">'회의록 생성' 버튼을 눌러 회의록을 생성하세요.</p>
         </div>
       )}
       {loading && !pdfPreview && (

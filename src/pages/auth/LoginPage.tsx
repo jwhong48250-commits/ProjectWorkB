@@ -138,9 +138,7 @@ export default function LoginPage() {
         <Link to="/reset-password" className="hover:text-foreground transition-colors">비밀번호를 잊으셨나요?</Link>
         <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
           <span>계정이 없으신가요?</span>
-          <Link to="/signup/member" className="text-accent font-medium hover:underline">멤버 회원가입</Link>
-          <span className="text-border">|</span>
-          <Link to="/signup/admin" className="text-accent font-medium hover:underline">관리자 회원가입</Link>
+          <Link to="/signup" className="text-accent font-medium hover:underline">멤버/관리자 회원가입</Link>
         </div>
       </div>
     </div>
