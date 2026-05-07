@@ -151,7 +151,6 @@ function MinutesTab({
   const [generating, setGenerating] = useState(false)
   const [pdfPreview, setPdfPreview] = useState<MinutesPdfPreview | null>(null)
   const [loadingPdf, setLoadingPdf] = useState(false)
-  const [renderMode, setRenderMode] = useState<'html' | 'overlay'>('html')
 
   // 진입 시: 회의록 ensure → 즉시 PDF 자동 생성
   useEffect(() => {
@@ -160,7 +159,7 @@ function MinutesTab({
         setMinutes(data)
         setLoadingMinutes(false)
         setLoadingPdf(true)
-        return getMinutesPdfPreview(meetingId, workspaceId, undefined, renderMode)
+        return getMinutesPdfPreview(meetingId, workspaceId)
           .then((res) => setPdfPreview(res))
           .catch(() => showToast('PDF 생성에 실패했습니다.', 'error'))
           .finally(() => setLoadingPdf(false))
@@ -198,10 +197,10 @@ function MinutesTab({
     }
   }
 
-  async function handlePdfPreview(fieldValues?: Record<string, string>, mode?: 'html' | 'overlay') {
+  async function handlePdfPreview(fieldValues?: Record<string, string>) {
     setLoadingPdf(true)
     try {
-      const res = await getMinutesPdfPreview(meetingId, workspaceId, fieldValues, mode ?? renderMode)
+      const res = await getMinutesPdfPreview(meetingId, workspaceId, fieldValues)
       setPdfPreview(res)
     } catch {
       showToast('PDF 미리보기 생성에 실패했습니다.', 'error')
@@ -234,11 +233,6 @@ function MinutesTab({
         pdfPreview={pdfPreview}
         loading={loadingPdf}
         generating={generating}
-        renderMode={renderMode}
-        onRenderModeChange={(m) => {
-          setRenderMode(m)
-          handlePdfPreview(undefined, m)
-        }}
         onRegenerate={handleGenerate}
         onRefresh={(fv) => handlePdfPreview(fv)}
         onGeneratePreview={() => handlePdfPreview()}
@@ -270,8 +264,6 @@ function PdfOverlayEditor({
   pdfPreview,
   loading,
   generating,
-  renderMode,
-  onRenderModeChange,
   onRegenerate,
   onRefresh,
   onGeneratePreview,
@@ -280,8 +272,6 @@ function PdfOverlayEditor({
   pdfPreview: MinutesPdfPreview | null
   loading: boolean
   generating: boolean
-  renderMode: 'html' | 'overlay'
-  onRenderModeChange: (m: 'html' | 'overlay') => void
   onRegenerate: () => void
   onRefresh: (fieldValues: Record<string, string>) => void
   onGeneratePreview: () => void
@@ -339,26 +329,6 @@ function PdfOverlayEditor({
           </div>
         </div>
         <div className="flex items-center gap-1.5 flex-wrap shrink-0">
-          {/* 렌더 모드 토글 */}
-          <div className="flex items-center h-7 rounded-md border border-border bg-background text-mini overflow-hidden">
-            {(['html', 'overlay'] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                disabled={loading}
-                onClick={() => onRenderModeChange(m)}
-                className={clsx(
-                  'px-2.5 py-0.5 h-full transition-colors',
-                  renderMode === m
-                    ? 'bg-accent text-accent-foreground font-medium'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                {m === 'html' ? 'HTML' : '오버레이'}
-              </button>
-            ))}
-          </div>
-
           {pdfPreview && (
             <div className="flex items-center h-7 rounded-md border border-border bg-background px-1 text-mini text-muted-foreground">
               <button
