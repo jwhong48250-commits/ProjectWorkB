@@ -43,6 +43,7 @@ const SESSION_KEYS = [
   "workb-invite-code",
   "workb-workspace-role",
 ];
+const PERSISTED_LOCAL_PREFIXES = ["workb-profile-image-"];
 
 let refreshPromise: Promise<TokenResponse> | null = null;
 
@@ -173,7 +174,10 @@ export function clearAuthTokens(): void {
 
   for (let i = 0; i < localStorage.length; i += 1) {
     const key = localStorage.key(i);
-    if (key?.startsWith("workb-")) {
+    if (
+      key?.startsWith("workb-") &&
+      !PERSISTED_LOCAL_PREFIXES.some((prefix) => key.startsWith(prefix))
+    ) {
       localKeysToRemove.push(key);
     }
   }
@@ -296,6 +300,9 @@ export function syncStoredUserFromToken(
   const name = readStringClaim(payload?.name) ?? fallback.name;
   const workspaceId =
     readWorkspaceIdClaim(payload?.workspace_id) ?? fallback.workspace_id;
+  const hasBirthDateClaim = Object.prototype.hasOwnProperty.call(payload ?? {}, "birth_date");
+  const hasPhoneNumberClaim = Object.prototype.hasOwnProperty.call(payload ?? {}, "phone_number");
+  const hasGenderClaim = Object.prototype.hasOwnProperty.call(payload ?? {}, "gender");
   const birthDate =
     payload?.birth_date === null
       ? null
@@ -317,10 +324,10 @@ export function syncStoredUserFromToken(
     role,
     workspace_id:
       workspaceId ?? previous?.workspace_id ?? getCurrentWorkspaceId(),
-    birth_date: birthDate ?? previous?.birth_date ?? null,
+    birth_date: hasBirthDateClaim ? birthDate ?? null : birthDate ?? previous?.birth_date ?? null,
     age: age ?? previous?.age ?? null,
-    phone_number: phoneNumber ?? previous?.phone_number ?? null,
-    gender: gender ?? previous?.gender ?? null,
+    phone_number: hasPhoneNumberClaim ? phoneNumber ?? null : phoneNumber ?? previous?.phone_number ?? null,
+    gender: hasGenderClaim ? gender ?? null : gender ?? previous?.gender ?? null,
   };
 
   setStoredUser(user);

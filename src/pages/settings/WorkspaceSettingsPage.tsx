@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Image as ImageIcon, Save, Trash2, Upload, X } from "lucide-react";
 import { getCurrentWorkspaceId } from "../../api/client";
-import { deleteWorkspace, getWorkspace, updateWorkspace } from "../../api/workspace";
+import { deleteWorkspace, getWorkspace, updateWorkspace, uploadWorkspaceLogoFile } from "../../api/workspace";
 import { useAuth } from "../../context/AuthContext";
 import {
   DEFAULT_WORKSPACE_LOGO_URL,
@@ -14,15 +14,6 @@ import { getCurrentWorkspaceRole } from "../../utils/workspace";
 
 const LANGUAGES = ["한국어", "English", "日本語", "中文"];
 const MAX_LOGO_SIZE = 1024 * 1024;
-
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error("로고 파일을 읽지 못했습니다."));
-    reader.readAsDataURL(file);
-  });
-}
 
 export default function WorkspaceSettingsPage() {
   const navigate = useNavigate();
@@ -93,8 +84,9 @@ export default function WorkspaceSettingsPage() {
     }
 
     try {
-      const dataUrl = await readFileAsDataUrl(file);
-      setLogoUrl(dataUrl);
+      const { logo_url } = await uploadWorkspaceLogoFile(workspaceId, file);
+      setLogoUrl(logo_url);
+      setWorkspaceLogoUrl(workspaceId, logo_url);
       setLogoFileName(file.name);
       setError("");
     } catch (err) {
@@ -116,7 +108,7 @@ export default function WorkspaceSettingsPage() {
     setError("");
 
     try {
-      const isLocalUpload = logoUrl.startsWith("data:");
+      const isLocalUpload = logoUrl.includes("/storage/teamlogo/");
       const workspace = await updateWorkspace(workspaceId, {
         name: teamName,
         industry: industry || null,

@@ -1,4 +1,5 @@
 import { apiRequest } from './client'
+import { getApiOrigin } from './baseUrl'
 
 export type UserRole = 'admin' | 'member' | 'viewer'
 
@@ -81,6 +82,23 @@ export function updateWorkspace(
     method: 'PATCH',
     body: JSON.stringify(payload),
   })
+}
+
+export async function uploadWorkspaceLogoFile(
+  workspaceId: number,
+  file: File,
+): Promise<{ logo_url: string }> {
+  const formData = new FormData()
+  formData.append('file', file)
+  const response = await apiRequest<{ logo_url: string }>(`/workspaces/${workspaceId}/logo-file`, {
+    method: 'POST',
+    body: formData,
+  })
+  return {
+    logo_url: response.logo_url.startsWith('http')
+      ? response.logo_url
+      : `${getApiOrigin()}${response.logo_url}`,
+  }
 }
 
 export async function issueInviteCode(workspaceId: number): Promise<InviteCodeIssueResponse> {
