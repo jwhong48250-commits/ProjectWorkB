@@ -2,14 +2,14 @@ import { useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Upload, FileAudio, Loader2, CheckCircle2 } from 'lucide-react'
 import { getCurrentWorkspaceId } from '../../utils/workspace'
-import { startWorkspaceMeeting, endWorkspaceMeeting } from '../../api/meetings'
+import { startWorkspaceMeeting, endWorkspaceMeeting, fetchWorkspaceMeetingDetail } from '../../api/meetings'
 
 const ASR_BASE =
   ((import.meta.env.VITE_ASR_SERVER as string | undefined) ?? 'http://localhost:8888')
     .trim()
     .replace(/\/+$/, '')
 
-type SimStatus = 'idle' | 'uploading' | 'done' | 'error'
+type SimStatus = 'idle' | 'uploading' | 'polling' | 'done' | 'error'
 
 export default function SimulatePage() {
   const { meetingId } = useParams<{ meetingId: string }>()
@@ -64,9 +64,22 @@ export default function SimulatePage() {
         throw new Error(`ASR 서버 오류 (${res.status})${text ? `: ${text}` : ''}`)
       }
 
-      // 3. 회의 종료 + LangGraph 후처리 파이프라인
+      // 3. 회의 종료 + LangGraph 후처리 파이프라인 트리거
       await endWorkspaceMeeting(workspaceId, Number(meetingId))
 
+      // 4. summary 생성 대기 폴링 (최대 90초)
+      setStatus('polling')
+      for (let i = 0; i < 10; i++) {
+        try {
+          const detail = await fetchWorkspaceMeetingDetail(workspaceId, Number(meetingId))
+          if (detail?.summary) {
+            setStatus('done')
+            navigate(`/meetings/${meetingId}/notes`, { state: { meeting: detail } })
+            return
+          }
+        } catch { /* ignore, keep polling */ }
+        if (i < 9) await new Promise<void>((r) => setTimeout(r, 10000))
+      }
       setStatus('done')
       navigate(`/meetings/${meetingId}/notes`)
     } catch (err) {
@@ -80,6 +93,8 @@ export default function SimulatePage() {
   }
 
   const isUploading = status === 'uploading'
+  const isPolling = status === 'polling'
+  const isBusy = isUploading || isPolling
 
   return (
     <div className="min-h-screen bg-background">
@@ -104,7 +119,7 @@ export default function SimulatePage() {
           {/* 파일 선택 */}
           <div
             className="border-2 border-dashed border-muted rounded-xl p-10 flex flex-col items-center gap-3 cursor-pointer hover:border-accent transition-colors"
-            onClick={() => !isUploading && inputRef.current?.click()}
+            onClick={() => !isBusy && inputRef.current?.click()}
           >
             <FileAudio size={40} className="text-muted-foreground" />
             <div className="text-center">
@@ -130,6 +145,13 @@ export default function SimulatePage() {
             </p>
           )}
 
+          {isPolling && (
+            <div className="flex items-center gap-2 text-sm text-yellow-700 bg-yellow-50 rounded-lg px-4 py-2.5">
+              <Loader2 size={16} className="animate-spin" />
+              <span>AI 회의 요약 생성 중… 완료되면 자동 이동합니다.</span>
+            </div>
+          )}
+
           {status === 'done' && (
             <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 rounded-lg px-4 py-2.5">
               <CheckCircle2 size={16} />
@@ -139,13 +161,13 @@ export default function SimulatePage() {
 
           <button
             type="submit"
-            disabled={!file || isUploading || status === 'done'}
+            disabled={!file || isBusy || status === 'done'}
             className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-accent text-accent-foreground font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
           >
-            {isUploading ? (
+            {isBusy ? (
               <>
                 <Loader2 size={16} className="animate-spin" />
-                화자분리 처리 중…
+                {isPolling ? '요약 생성 중…' : '화자분리 처리 중…'}
               </>
             ) : (
               <>
