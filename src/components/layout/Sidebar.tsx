@@ -36,7 +36,12 @@ import {
   WORKSPACE_CHANGED_EVENT,
   WORKSPACE_ROLE_CHANGED_EVENT,
 } from "../../utils/workspace";
-import { useWorkspaceLogo } from "../../utils/workspaceLogo";
+import {
+  DEFAULT_WORKSPACE_LOGO_URL,
+  getStoredWorkspaceLogoUrl,
+  setWorkspaceLogoUrl,
+  useStoredWorkspaceLogo,
+} from "../../utils/workspaceLogo";
 import { useProfileImage } from "../../utils/profileImage";
 import {
   fetchMyWorkspaces,
@@ -49,6 +54,7 @@ interface Workspace {
   initial: string;
   color: string;
   role: string;
+  logoUrl: string;
 }
 
 function colorForWorkspace(id: number): string {
@@ -77,6 +83,7 @@ function toUiWorkspace(w: WorkspaceListItem): Workspace {
     initial: initialForName(w.name),
     color: colorForWorkspace(w.id),
     role: w.role,
+    logoUrl: w.logo_url || getStoredWorkspaceLogoUrl(w.id),
   };
 }
 
@@ -87,7 +94,6 @@ interface WorkspaceSelectorProps {
 
 function WorkspaceSelector({ collapsed }: WorkspaceSelectorProps) {
   const navigate = useNavigate();
-  const { user } = useAuth();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [currentId, setCurrentId] = useState<number>(() =>
     getCurrentWorkspaceId()
@@ -96,7 +102,7 @@ function WorkspaceSelector({ collapsed }: WorkspaceSelectorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listId = useId();
-  const profileImage = useProfileImage(user?.id);
+  const currentLogoUrl = useStoredWorkspaceLogo(currentId);
 
   const current = useMemo(
     () => workspaces.find((w) => w.id === currentId) ?? workspaces[0],
@@ -108,6 +114,11 @@ function WorkspaceSelector({ collapsed }: WorkspaceSelectorProps) {
     const request = fetchMyWorkspaces()
       .then((rows) => {
         if (!mounted) return;
+        rows.forEach((workspace) => {
+          if (workspace.logo_url) {
+            setWorkspaceLogoUrl(workspace.id, workspace.logo_url);
+          }
+        });
         const ui = rows.map(toUiWorkspace);
         setWorkspaces(ui);
 
@@ -205,12 +216,13 @@ function WorkspaceSelector({ collapsed }: WorkspaceSelectorProps) {
 
   function renderWorkspaceAvatar(ws: Workspace, size: "sm" | "md") {
     const sizeClass = size === "sm" ? "w-5 h-5 text-[10px]" : "w-6 h-6 text-xs";
+    const logoUrl = ws.id === currentId ? currentLogoUrl : ws.logoUrl;
 
-    if (profileImage) {
+    if (logoUrl) {
       return (
         <img
-          src={profileImage}
-          alt={user?.name ?? ws.name}
+          src={logoUrl}
+          alt={`${ws.name} 팀 로고`}
           className={clsx(sizeClass, "rounded object-cover shrink-0")}
         />
       );
@@ -395,27 +407,18 @@ export default function Sidebar({
 }: SidebarProps) {
   const { user } = useAuth();
   const settingsPath = "/settings/my";
-  const [workspaceId, setWorkspaceId] = useState(() => getCurrentWorkspaceId());
   const [workspaceRole, setWorkspaceRoleState] = useState(() => getCurrentWorkspaceRole());
-  const workspaceLogoUrl = useWorkspaceLogo(workspaceId);
   const profileImage = useProfileImage(user?.id);
   const isWorkspaceAdmin = workspaceRole === "admin";
 
   useEffect(() => {
-    function handleWorkspaceChanged(event: Event) {
-      const nextId = (event as CustomEvent<{ id: number }>).detail?.id;
-      if (Number.isFinite(nextId) && nextId > 0) setWorkspaceId(nextId);
-    }
-
     function handleWorkspaceRoleChanged(event: Event) {
       const nextRole = (event as CustomEvent<{ role: string }>).detail?.role;
       setWorkspaceRoleState(nextRole || getCurrentWorkspaceRole());
     }
 
-    window.addEventListener(WORKSPACE_CHANGED_EVENT, handleWorkspaceChanged);
     window.addEventListener(WORKSPACE_ROLE_CHANGED_EVENT, handleWorkspaceRoleChanged);
     return () => {
-      window.removeEventListener(WORKSPACE_CHANGED_EVENT, handleWorkspaceChanged);
       window.removeEventListener(WORKSPACE_ROLE_CHANGED_EVENT, handleWorkspaceRoleChanged);
     };
   }, []);
@@ -475,9 +478,9 @@ export default function Sidebar({
                   aria-label="홈으로 이동"
                 >
                   <img
-                    src={workspaceLogoUrl}
-                    alt="Workb 로고"
-                    className="w-6 h-6 rounded object-cover shrink-0"
+                    src={DEFAULT_WORKSPACE_LOGO_URL}
+                    alt="Workb 서비스 로고"
+                    className="w-6 h-6 rounded object-contain shrink-0"
                   />
                 </Link>
               </Tooltip>
@@ -492,9 +495,9 @@ export default function Sidebar({
                 tabIndex={-1}
               >
                 <img
-                  src={workspaceLogoUrl}
-                  alt="Workb 로고"
-                  className="w-6 h-6 rounded object-cover"
+                  src={DEFAULT_WORKSPACE_LOGO_URL}
+                  alt="Workb 서비스 로고"
+                  className="w-6 h-6 rounded object-contain"
                 />
               </Link>
               <WorkspaceSelector collapsed={false} />

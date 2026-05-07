@@ -3,14 +3,22 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Building2, Check, Image as ImageIcon, KeyRound, Save, Trash2, Upload, UserRound, X } from 'lucide-react'
 import clsx from 'clsx'
 import { ApiError } from '../../api/client'
-import { updateMyProfile, withdrawMyAccount, type Gender } from '../../api/auth'
-import { joinWorkspaceByInviteCode } from '../../api/workspace'
+import { updateMyProfile, uploadMyProfileImage, withdrawMyAccount, type Gender } from '../../api/auth'
+import {
+  getWorkspaceMembers,
+  joinWorkspaceByInviteCode,
+} from '../../api/workspace'
 import { useAuth } from '../../context/AuthContext'
 import BirthDateSelect from '../../components/auth/BirthDateSelect'
 import { useAccentColor, type AccentPreset } from '../../hooks/useAccentColor'
 import { useFontScale, type FontScale } from '../../context/FontScaleContext'
 import { getProfileImage, setProfileImage } from '../../utils/profileImage'
-import { setCurrentWorkspaceId, setCurrentWorkspaceRole } from '../../utils/workspace'
+import {
+  getCurrentWorkspaceId,
+  setCurrentWorkspaceId,
+  setCurrentWorkspaceRole,
+  WORKSPACE_CHANGED_EVENT,
+} from '../../utils/workspace'
 
 const MAX_PROFILE_IMAGE_SIZE = 1024 * 1024
 
@@ -23,15 +31,6 @@ const FONT_SCALE_OPTIONS: {
   { id: 'md', label: '보통', hint: '18px 기준' },
   { id: 'lg', label: '크게', hint: '20px 기준' },
 ]
-
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result))
-    reader.onerror = () => reject(new Error('프로필 이미지를 읽지 못했습니다.'))
-    reader.readAsDataURL(file)
-  })
-}
 
 export default function MyPage() {
   const navigate = useNavigate()
@@ -58,6 +57,7 @@ export default function MyPage() {
   const [saving, setSaving] = useState(false)
   const [inviteCode, setInviteCode] = useState('')
   const [joiningWorkspace, setJoiningWorkspace] = useState(false)
+  const [departmentName, setDepartmentName] = useState('부서 없음')
   const [workspaceJoinMessage, setWorkspaceJoinMessage] = useState('')
   const [withdrawing, setWithdrawing] = useState(false)
   const [error, setError] = useState('')
@@ -87,6 +87,42 @@ export default function MyPage() {
 
   useEffect(() => {
     setDraftProfileImage(getProfileImage(profileImageUserId))
+  }, [profileImageUserId])
+
+  useEffect(() => {
+    let active = true
+
+    async function loadMyWorkspaceProfile() {
+      if (!profileImageUserId) {
+        setDepartmentName('부서 없음')
+        return
+      }
+
+      try {
+        const rows = await getWorkspaceMembers(getCurrentWorkspaceId())
+        if (!active) return
+        const me = rows.find((member) => member.user_id === profileImageUserId)
+        setDepartmentName(me?.department ?? '부서 없음')
+        if (me) {
+          setDraftBirthDate(me.birth_date ?? '')
+          setDraftGender(me.gender ?? '')
+        }
+      } catch {
+        if (active) setDepartmentName('부서 없음')
+      }
+    }
+
+    void loadMyWorkspaceProfile()
+
+    function handleWorkspaceChanged() {
+      void loadMyWorkspaceProfile()
+    }
+
+    window.addEventListener(WORKSPACE_CHANGED_EVENT, handleWorkspaceChanged)
+    return () => {
+      active = false
+      window.removeEventListener(WORKSPACE_CHANGED_EVENT, handleWorkspaceChanged)
+    }
   }, [profileImageUserId])
 
   useEffect(() => {
@@ -126,8 +162,8 @@ export default function MyPage() {
     }
 
     try {
-      const dataUrl = await readFileAsDataUrl(file)
-      setDraftProfileImage(dataUrl)
+      const { image_url } = await uploadMyProfileImage(file)
+      setDraftProfileImage(image_url)
       setError('')
       setMessage('')
     } catch (err) {
@@ -169,8 +205,9 @@ export default function MyPage() {
         phone_number: nextPhoneNumber || null,
         gender: draftGender || null,
       })
-      saveUser(response.user)
-      savedName = response.user.name
+      const savedUser = response.user
+      saveUser(savedUser)
+      savedName = savedUser.name
 
       setProfileImage(profileImageUserId, draftProfileImage)
 
@@ -183,6 +220,9 @@ export default function MyPage() {
         accentAsMain: draftAccentAsMain,
       }
       setDraftName(savedName)
+      setDraftBirthDate(savedUser.birth_date ?? '')
+      setDraftPhoneNumber(savedUser.phone_number ?? '')
+      setDraftGender(savedUser.gender ?? '')
       setMessage('마이페이지 설정이 저장되었습니다.')
     } catch (err) {
       setError(
@@ -321,6 +361,19 @@ export default function MyPage() {
                 setMessage('')
               }}
               className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
+            />
+          </div>
+
+          <div className="mt-4">
+            <label className="mb-1.5 block text-sm font-medium text-foreground" htmlFor="profile-department">
+              부서
+            </label>
+            <input
+              id="profile-department"
+              type="text"
+              value={departmentName}
+              readOnly
+              className="h-10 w-full cursor-default rounded-lg border border-border bg-muted/40 px-3 text-sm text-muted-foreground outline-none"
             />
           </div>
 

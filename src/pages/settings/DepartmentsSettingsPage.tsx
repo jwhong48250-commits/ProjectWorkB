@@ -11,6 +11,8 @@ import {
   type WorkspaceMember,
 } from '../../api/workspace'
 
+const DEPARTMENT_TABLE_GRID = 'md:grid-cols-[minmax(14rem,1fr)_6rem_7.5rem_12rem]'
+
 function formatDate(value: string): string {
   return new Date(value).toLocaleDateString('ko-KR', {
     year: 'numeric',
@@ -201,11 +203,11 @@ export default function DepartmentsSettingsPage() {
       </form>
 
       <div className="rounded-lg border border-border overflow-hidden bg-card">
-        <div className="hidden md:grid grid-cols-[1fr_auto_auto_auto] gap-3 px-4 py-2 bg-muted/40 border-b border-border text-micro font-medium text-muted-foreground uppercase tracking-wide">
-          <span>부서명</span>
+        <div className={`hidden md:grid ${DEPARTMENT_TABLE_GRID} gap-3 px-6 py-2 bg-muted/40 border-b border-border text-center text-micro font-medium text-muted-foreground uppercase tracking-wide`}>
+          <span className="text-left md:pl-14">부서명</span>
           <span>소속 멤버</span>
           <span>생성일</span>
-          <span></span>
+          <span>관리</span>
         </div>
 
         {departments.length === 0 ? (
@@ -218,9 +220,9 @@ export default function DepartmentsSettingsPage() {
           const memberCount = getDepartmentMemberCount(department.department_id)
 
           return (
-            <div key={department.department_id} className="px-4 py-3 border-b border-border last:border-0 hover:bg-muted/20 transition-colors">
-              <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto_auto] gap-3 md:items-center">
-                <div className="min-w-0">
+            <div key={department.department_id} className="px-6 py-3 border-b border-border last:border-0 hover:bg-muted/20 transition-colors">
+              <div className={`grid grid-cols-1 ${DEPARTMENT_TABLE_GRID} gap-3 md:items-center`}>
+                <div className="min-w-0 md:pl-5">
                   {isEditing ? (
                     <input
                       type="text"
@@ -244,10 +246,10 @@ export default function DepartmentsSettingsPage() {
                   )}
                 </div>
 
-                <span className="hidden md:inline text-mini text-muted-foreground">{memberCount}명</span>
-                <span className="hidden md:inline text-mini text-muted-foreground">{formatDate(department.created_at)}</span>
+                <span className="hidden text-center text-mini text-muted-foreground md:inline">{memberCount}명</span>
+                <span className="hidden text-center text-mini text-muted-foreground md:inline">{formatDate(department.created_at)}</span>
 
-                <div className="flex items-center gap-1.5 justify-end">
+                <div className="flex items-center gap-1.5 justify-end md:justify-center">
                   {isEditing ? (
                     <>
                       <button

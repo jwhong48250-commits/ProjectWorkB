@@ -112,12 +112,12 @@ function Picker({ label, placeholder, value, options, formatLabel, onChange, com
         className={clsx(
           'relative flex w-full items-center rounded-lg border border-border bg-card text-sm outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/30',
           compact ? 'justify-center text-center' : 'justify-between text-left',
-          compact ? 'h-8 px-2 text-mini' : 'h-10 px-3',
+          compact ? 'h-8 px-1.5 pr-5 text-mini' : 'h-10 px-3',
           value ? 'text-foreground' : 'text-muted-foreground',
         )}
       >
-        <span className={compact ? 'whitespace-nowrap text-center' : 'truncate'}>{value ? formatLabel(value) : placeholder}</span>
-        <span className={clsx('text-muted-foreground', compact ? 'absolute right-2' : 'ml-2')}>⌄</span>
+        <span className={compact ? 'block w-full truncate whitespace-nowrap text-center' : 'truncate'}>{value ? formatLabel(value) : placeholder}</span>
+        <span className={clsx('pointer-events-none text-muted-foreground', compact ? 'absolute right-1.5 top-1/2 -translate-y-1/2 leading-none' : 'ml-2')}>⌄</span>
       </button>
       {compact && menu ? createPortal(menu, document.body) : menu}
     </div>
@@ -149,27 +149,31 @@ export default function BirthDateSelect({ value, onChange, compact = false }: Bi
     setDay(value.split('-')[2] ?? '')
   }, [value])
 
-  useEffect(() => {
-    if (day && !days.includes(day)) {
-      setDay(days[days.length - 1] ?? '')
-      return
-    }
+  function commitDate(nextYear: string, nextMonth: string, nextDay: string) {
+    const maxDay = daysInMonth(nextYear, nextMonth)
+    const normalizedDay = nextDay && Number(nextDay) > maxDay ? pad(String(maxDay)) : nextDay
+    const nextValue = nextYear && nextMonth && normalizedDay
+      ? `${nextYear}-${nextMonth}-${normalizedDay}`
+      : ''
 
-    const nextValue = year && month && day ? `${year}-${month}-${day}` : ''
-    if (nextValue !== value) {
+    setYear(nextYear)
+    setMonth(nextMonth)
+    setDay(normalizedDay)
+
+    if (nextValue && nextValue !== value) {
       onChange(nextValue)
     }
-  }, [year, month, day, days, onChange, value])
+  }
 
   return (
-    <div className={clsx('grid', compact ? 'grid-cols-[4.5rem_3.5rem_3.5rem] gap-1.5' : 'grid-cols-[1.2fr_1fr_1fr] gap-2')}>
+    <div className={clsx('grid min-w-0', compact ? 'grid-cols-[minmax(4.5rem,1fr)_minmax(3.25rem,0.72fr)_minmax(3.25rem,0.72fr)] gap-1.5' : 'grid-cols-[1.2fr_1fr_1fr] gap-2')}>
       <Picker
         label="생년"
         placeholder="연도"
         value={year}
         options={years}
         formatLabel={(item) => `${item}년`}
-        onChange={setYear}
+        onChange={(nextYear) => commitDate(nextYear, month, day)}
         compact={compact}
       />
       <Picker
@@ -178,7 +182,7 @@ export default function BirthDateSelect({ value, onChange, compact = false }: Bi
         value={month}
         options={months}
         formatLabel={(item) => `${Number(item)}월`}
-        onChange={setMonth}
+        onChange={(nextMonth) => commitDate(year, nextMonth, day)}
         compact={compact}
       />
       <Picker
@@ -187,7 +191,7 @@ export default function BirthDateSelect({ value, onChange, compact = false }: Bi
         value={day}
         options={days}
         formatLabel={(item) => `${Number(item)}일`}
-        onChange={setDay}
+        onChange={(nextDay) => commitDate(year, month, nextDay)}
         compact={compact}
       />
     </div>

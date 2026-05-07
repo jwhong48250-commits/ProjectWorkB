@@ -6,6 +6,7 @@ export interface WorkspaceListItem {
   id: number
   name: string
   role: WorkspaceRole
+  logo_url: string | null
 }
 
 interface WorkspaceListResponse {
