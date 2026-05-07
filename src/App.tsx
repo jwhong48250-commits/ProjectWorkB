@@ -9,8 +9,7 @@ import { PublicOnlyRoute, RequireAuthRoute, RequireMeetingCreatorRoute, RequireW
 // Auth pages
 import LoginPage from './pages/auth/LoginPage'
 import OAuthCallbackPage from './pages/auth/OAuthCallbackPage'
-import SignupAdminPage from './pages/auth/SignupAdminPage'
-import SignupMemberPage from './pages/auth/SignupMemberPage'
+import SignupPage from './pages/auth/SignupPage'
 import ResetPasswordPage from './pages/auth/ResetPasswordPage'
 
 // Onboarding pages
@@ -59,8 +58,9 @@ export default function App() {
           <Route element={<AuthLayout />}>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
-            <Route path="/signup/admin" element={<SignupAdminPage />} />
-            <Route path="/signup/member" element={<SignupMemberPage />} />
+            <Route path="/signup" element={<SignupPage />} />
+            <Route path="/signup/admin" element={<Navigate to="/signup?role=admin" replace />} />
+            <Route path="/signup/member" element={<Navigate to="/signup?role=member" replace />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
           </Route>
         </Route>

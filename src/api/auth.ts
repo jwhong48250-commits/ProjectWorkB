@@ -21,9 +21,9 @@ export interface AdminSignupPayload {
   email: string
   password: string
   name: string
-  birth_date: string
-  phone_number: string
-  gender: Gender
+  birth_date?: string
+  phone_number?: string
+  gender?: Gender
 }
 
 export interface AdminSignupResponse {
@@ -45,9 +45,9 @@ export interface MemberSignupPayload {
   email: string
   password: string
   name: string
-  birth_date: string
-  phone_number: string
-  gender: Gender
+  birth_date?: string
+  phone_number?: string
+  gender?: Gender
 }
 
 export type Gender = 'male' | 'female'
@@ -69,6 +69,9 @@ export interface UserProfileResponse extends UserResponse {
 
 export interface UserProfileUpdatePayload {
   name: string
+  birth_date?: string | null
+  phone_number?: string | null
+  gender?: Gender | null
 }
 
 interface UserProfileUpdateResponse {
@@ -102,6 +105,12 @@ export type SocialLoginRole = 'admin' | 'member'
 
 export interface OAuthUrlResponse {
   auth_url: string
+}
+
+export interface SocialSignupPayload {
+  signup_token: string
+  role: SocialLoginRole
+  invite_code?: string
 }
 
 export interface DeviceSettingsPayload {
@@ -161,6 +170,14 @@ export function getSocialOAuthUrl(
   const query = role ? `?role=${role}` : ''
   return apiRequest<OAuthUrlResponse>(`/users/oauth/${provider}/auth${query}`, {
     skipAuthRefresh: true,
+  })
+}
+
+export function completeSocialSignup(payload: SocialSignupPayload): Promise<TokenResponse> {
+  return apiRequest<TokenResponse>('/users/oauth/social-signup', {
+    method: 'POST',
+    skipAuthRefresh: true,
+    body: JSON.stringify(payload),
   })
 }
 
