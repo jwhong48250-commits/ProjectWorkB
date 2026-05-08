@@ -29,12 +29,34 @@ function timeAgo(iso: string): string {
 
 interface NotificationsPanelProps {
   onClose: () => void
+  onUnreadCountChange?: (count: number) => void
 }
 
-export default function NotificationsPanel({ onClose }: NotificationsPanelProps) {
+export default function NotificationsPanel({ onClose, onUnreadCountChange }: NotificationsPanelProps) {
   const [items, setItems] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [loading, setLoading] = useState(true)
+
+  async function fetchNotifications(): Promise<void> {
+    const workspaceId = getCurrentWorkspaceId()
+    setLoading(true)
+    try {
+      const res = await apiRequest<{ notifications: Notification[]; unread_count: number }>(
+        `/notifications/workspaces/${workspaceId}?limit=30`,
+      )
+      const nextItems = Array.isArray(res.notifications) ? res.notifications : []
+      const nextUnread = Number(res.unread_count ?? 0) || 0
+      setItems(nextItems)
+      setUnreadCount(nextUnread)
+      onUnreadCountChange?.(nextUnread)
+    } catch {
+      setItems([])
+      setUnreadCount(0)
+      onUnreadCountChange?.(0)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   // ESC 키로 닫기
   useEffect(() => {
@@ -47,24 +69,9 @@ export default function NotificationsPanel({ onClose }: NotificationsPanelProps)
 
   useEffect(() => {
     let mounted = true
-    const workspaceId = getCurrentWorkspaceId()
-    setLoading(true)
-    apiRequest<{ notifications: Notification[]; unread_count: number }>(
-      `/notifications/workspaces/${workspaceId}?limit=30`,
-    )
-      .then((res) => {
-        if (!mounted) return
-        setItems(Array.isArray(res.notifications) ? res.notifications : [])
-        setUnreadCount(Number(res.unread_count ?? 0) || 0)
-      })
-      .catch(() => {
-        if (!mounted) return
-        setItems([])
-        setUnreadCount(0)
-      })
-      .finally(() => {
-        if (mounted) setLoading(false)
-      })
+    fetchNotifications().catch(() => {
+      /* handled in fetchNotifications */
+    })
     return () => {
       mounted = false
     }
@@ -129,6 +136,12 @@ export default function NotificationsPanel({ onClose }: NotificationsPanelProps)
                 } catch {
                   // ignore
                 }
+                // 패널/TopBar 즉시 동기화
+                try {
+                  await fetchNotifications()
+                } catch {
+                  // ignore
+                }
                 if (n.link) {
                   window.location.href = n.link
                 }
@@ -164,8 +177,12 @@ export default function NotificationsPanel({ onClose }: NotificationsPanelProps)
             try {
               const workspaceId = getCurrentWorkspaceId()
               await apiRequest(`/notifications/workspaces/${workspaceId}/read-all`, { method: 'POST' })
-              setItems((prev) => prev.map((n) => ({ ...n, read_at: n.read_at ?? new Date().toISOString() })))
-              setUnreadCount(0)
+            } catch {
+              // ignore
+            }
+            // 버튼 클릭 시 즉시 새로고침 (목록 + 종 옆 점)
+            try {
+              await fetchNotifications()
             } catch {
               // ignore
             }
@@ -182,7 +199,12 @@ export default function NotificationsPanel({ onClose }: NotificationsPanelProps)
               await apiRequest<{ deleted_count: number }>(`/notifications/workspaces/${workspaceId}/read`, {
                 method: 'DELETE',
               })
-              setItems((prev) => prev.filter((n) => !n.read_at))
+            } catch {
+              // ignore
+            }
+            // 버튼 클릭 시 즉시 새로고침 (목록 + 종 옆 점)
+            try {
+              await fetchNotifications()
             } catch {
               // ignore
             }

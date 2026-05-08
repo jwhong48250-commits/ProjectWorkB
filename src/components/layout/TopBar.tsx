@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, Plus, Sun, Moon, Bell, Monitor, Menu, LogOut } from 'lucide-react'
 import clsx from 'clsx'
@@ -39,6 +39,18 @@ export default function TopBar({
   const [unreadCount, setUnreadCount] = useState(0)
   const [workspaceRole, setWorkspaceRole] = useState(() => getCurrentWorkspaceRole())
   const searchInputRef = useRef<HTMLInputElement>(null)
+
+  const refreshUnreadCount = useCallback(async () => {
+    const workspaceId = getCurrentWorkspaceId()
+    try {
+      const res = await apiRequest<{ unread_count: number }>(
+        `/notifications/workspaces/${workspaceId}?limit=1`,
+      )
+      setUnreadCount(Number(res.unread_count ?? 0) || 0)
+    } catch {
+      setUnreadCount(0)
+    }
+  }, [])
 
   const shortcutKbd =
     typeof navigator !== 'undefined' && /Mac|iPhone|iPod|iPad/i.test(navigator.userAgent)
@@ -83,28 +95,18 @@ export default function TopBar({
 
   useEffect(() => {
     let mounted = true
-    const workspaceId = getCurrentWorkspaceId()
-
-    async function refresh() {
-      try {
-        const res = await apiRequest<{ unread_count: number }>(
-          `/notifications/workspaces/${workspaceId}?limit=1`,
-        )
-        if (!mounted) return
-        setUnreadCount(Number(res.unread_count ?? 0) || 0)
-      } catch {
-        if (!mounted) return
-        setUnreadCount(0)
-      }
+    async function safeRefresh() {
+      if (!mounted) return
+      await refreshUnreadCount()
     }
 
-    refresh()
-    const id = window.setInterval(refresh, 30000)
+    safeRefresh()
+    const id = window.setInterval(safeRefresh, 30000)
     return () => {
       mounted = false
       window.clearInterval(id)
     }
-  }, [])
+  }, [refreshUnreadCount])
 
   function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key !== 'Enter') return
@@ -189,7 +191,12 @@ export default function TopBar({
             </button>
           </Tooltip>
 
-          {notifOpen && <NotificationsPanel onClose={() => setNotifOpen(false)} />}
+          {notifOpen && (
+            <NotificationsPanel
+              onClose={() => setNotifOpen(false)}
+              onUnreadCountChange={(count) => setUnreadCount(count)}
+            />
+          )}
         </div>
 
         <Tooltip label={THEME_CYCLE_HINT[themePreference]} placement="bottom">
