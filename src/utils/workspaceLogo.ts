@@ -7,6 +7,21 @@ function getWorkspaceLogoKey(workspaceId: number): string {
   return `workb-workspace-logo-${workspaceId}`
 }
 
+export function isUsableWorkspaceLogoUrl(value: string | null | undefined): value is string {
+  if (!value) return false
+  const trimmed = value.trim()
+  if (!trimmed || trimmed === DEFAULT_WORKSPACE_LOGO_URL) return false
+
+  try {
+    const url = new URL(trimmed, window.location.origin)
+    const path = url.pathname.replace(/\/+$/, '')
+    return path !== '/storage'
+  } catch {
+    const path = trimmed.split('?')[0].replace(/\/+$/, '')
+    return path !== '/storage'
+  }
+}
+
 function isProfileImageValue(value: string): boolean {
   for (let index = 0; index < localStorage.length; index += 1) {
     const key = localStorage.key(index)
@@ -47,7 +62,7 @@ export function getStoredWorkspaceLogoUrl(workspaceId: number): string {
   const key = getWorkspaceLogoKey(workspaceId)
   const stored = localStorage.getItem(key) ?? sessionStorage.getItem(key)
 
-  if (stored && stored !== DEFAULT_WORKSPACE_LOGO_URL && !isProfileImageValue(stored)) {
+  if (isUsableWorkspaceLogoUrl(stored) && !isProfileImageValue(stored)) {
     localStorage.setItem(key, stored)
     sessionStorage.removeItem(key)
     return stored
@@ -72,7 +87,7 @@ export function setWorkspaceLogoUrl(workspaceId: number, logoUrl: string | null)
   const key = getWorkspaceLogoKey(workspaceId)
   const nextLogoUrl = logoUrl || DEFAULT_WORKSPACE_LOGO_URL
 
-  if (logoUrl && logoUrl !== DEFAULT_WORKSPACE_LOGO_URL) {
+  if (isUsableWorkspaceLogoUrl(logoUrl)) {
     localStorage.setItem(key, logoUrl)
   } else {
     localStorage.removeItem(key)

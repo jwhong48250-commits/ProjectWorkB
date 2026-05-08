@@ -54,8 +54,8 @@ export default function DeviceSettingsPage() {
   const micStreamRef = useRef<MediaStream | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
   const animationRef = useRef<number | null>(null)
-  const testTimerRef = useRef<number | null>(null)
   const savedTimerRef = useRef<number | null>(null)
+  const inputLevelRef = useRef(0)
 
   const currentDeviceName = typeof navigator === 'undefined'
     ? '현재 브라우저'
@@ -72,11 +72,6 @@ export default function DeviceSettingsPage() {
       cancelAnimationFrame(animationRef.current)
       animationRef.current = null
     }
-    if (testTimerRef.current) {
-      window.clearTimeout(testTimerRef.current)
-      testTimerRef.current = null
-    }
-
     micStreamRef.current?.getTracks().forEach((track) => track.stop())
     micStreamRef.current = null
 
@@ -84,6 +79,7 @@ export default function DeviceSettingsPage() {
     audioContextRef.current = null
 
     setTesting(false)
+    inputLevelRef.current = 0
     setInputLevel(0)
   }
 
@@ -211,18 +207,21 @@ export default function DeviceSettingsPage() {
 
       const updateLevel = () => {
         analyser.getByteTimeDomainData(data)
-        let peak = 0
+        let sumSquares = 0
 
         for (const value of data) {
-          peak = Math.max(peak, Math.abs(value - 128) / 128)
+          const normalized = (value - 128) / 128
+          sumSquares += normalized * normalized
         }
 
-        setInputLevel(Math.min(100, Math.round(peak * 180)))
+        const rms = Math.sqrt(sumSquares / data.length)
+        const targetLevel = Math.min(100, Math.round(rms * 260))
+        inputLevelRef.current = inputLevelRef.current * 0.75 + targetLevel * 0.25
+        setInputLevel(Math.round(inputLevelRef.current))
         animationRef.current = requestAnimationFrame(updateLevel)
       }
 
       updateLevel()
-      testTimerRef.current = window.setTimeout(stopMicTest, 5000)
       await loadDevices()
     } catch (err) {
       setPermissionError(err instanceof Error ? err.message : '마이크를 사용할 수 없습니다.')
@@ -426,7 +425,7 @@ export default function DeviceSettingsPage() {
               <div className="h-2 rounded-full bg-border overflow-hidden">
                 <div
                   className="h-full rounded-full bg-green-500 transition-all duration-100"
-                  style={{ width: `${testing ? Math.max(inputLevel, 4) : 0}%` }}
+                  style={{ width: `${testing ? inputLevel : 0}%` }}
                 />
               </div>
             </div>

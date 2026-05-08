@@ -57,7 +57,7 @@ function formatAge(age: number | null): string {
 }
 
 function genderLabel(gender: WorkspaceMember['gender']): string {
-  return GENDER_OPTIONS.find((option) => option.value === gender)?.label ?? '-'
+  return GENDER_OPTIONS.find((option) => option.value === gender)?.label ?? '성별 미입력'
 }
 
 function getSettingsErrorMessage(err: unknown, fallback: string): string {
@@ -316,10 +316,13 @@ export default function MembersSettingsPage() {
                 </select>
                 <select
                   value={member.gender ?? ''}
-                  onChange={(e) => changeMemberProfile(member.user_id, { gender: e.target.value as Gender })}
+                  onChange={(e) => changeMemberProfile(member.user_id, {
+                    gender: e.target.value ? e.target.value as Gender : null,
+                  })}
                   className="h-9 rounded border border-border bg-card px-2 text-mini outline-none"
                   aria-label="성별 변경"
                 >
+                  <option value="">성별 선택</option>
                   {GENDER_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>{option.label}</option>
                   ))}
@@ -374,11 +377,14 @@ export default function MembersSettingsPage() {
               />
               <span className="text-center text-mini text-muted-foreground whitespace-nowrap">{formatAge(member.age)}</span>
               <select
-                  value={member.gender ?? ''}
-                onChange={(e) => changeMemberProfile(member.user_id, { gender: e.target.value as Gender })}
+                value={member.gender ?? ''}
+                onChange={(e) => changeMemberProfile(member.user_id, {
+                  gender: e.target.value ? e.target.value as Gender : null,
+                })}
                 className="h-8 w-full rounded border border-border bg-card px-2 text-center text-mini outline-none cursor-pointer hover:border-foreground transition-colors"
                 aria-label="성별 변경"
               >
+                <option value="">성별 선택</option>
                 {GENDER_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
