@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef, useId } from "react";
-import { NavLink, Link, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import {
   Home,
   History,
@@ -37,7 +37,6 @@ import {
   WORKSPACE_ROLE_CHANGED_EVENT,
 } from "../../utils/workspace";
 import {
-  DEFAULT_WORKSPACE_LOGO_URL,
   getStoredWorkspaceLogoUrl,
   setWorkspaceLogoUrl,
   useStoredWorkspaceLogo,
@@ -468,38 +467,11 @@ export default function Sidebar({
               : "items-center justify-between px-2.5 py-2.5"
           )}
         >
-          {/* 로고 (collapsed 시에는 홈 링크 역할) */}
+          {/* 워크스페이스 셀렉터 */}
           {collapsed ? (
-            <>
-              <Tooltip label="홈으로 이동" placement="right" block={false}>
-                <Link
-                  to="/"
-                  className="flex items-center justify-center rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-                  aria-label="홈으로 이동"
-                >
-                  <img
-                    src={DEFAULT_WORKSPACE_LOGO_URL}
-                    alt="Workb 서비스 로고"
-                    className="w-6 h-6 rounded object-contain shrink-0"
-                  />
-                </Link>
-              </Tooltip>
-            </>
+            <WorkspaceSelector collapsed />
           ) : (
-            /* 펼쳐진 상태: 로고 + 워크스페이스 셀렉터 */
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-              <Link
-                to="/"
-                className="flex items-center shrink-0 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-                aria-label="홈으로 이동"
-                tabIndex={-1}
-              >
-                <img
-                  src={DEFAULT_WORKSPACE_LOGO_URL}
-                  alt="Workb 서비스 로고"
-                  className="w-6 h-6 rounded object-contain"
-                />
-              </Link>
+            <div className="flex flex-1 min-w-0">
               <WorkspaceSelector collapsed={false} />
             </div>
           )}

@@ -109,11 +109,15 @@ export default function WorkspaceSettingsPage() {
 
     try {
       const isLocalUpload = logoUrl.includes("/storage/teamlogo/");
-      const workspace = await updateWorkspace(workspaceId, {
+      const nextLogoUrl = logoUrl === DEFAULT_WORKSPACE_LOGO_URL ? null : logoUrl || null;
+      const payload = {
         name: teamName,
         industry: industry || null,
         default_language: language,
-        logo_url: isLocalUpload ? null : logoUrl || null,
+        ...(!isLocalUpload ? { logo_url: nextLogoUrl } : {}),
+      };
+      const workspace = await updateWorkspace(workspaceId, {
+        ...payload,
       });
       if (isLocalUpload) {
         setWorkspaceLogoUrl(workspaceId, logoUrl);

@@ -43,7 +43,10 @@ const SESSION_KEYS = [
   "workb-invite-code",
   "workb-workspace-role",
 ];
-const PERSISTED_LOCAL_PREFIXES = ["workb-profile-image-"];
+const PERSISTED_LOCAL_PREFIXES = [
+  "workb-profile-image-",
+  "workb-workspace-logo-",
+];
 
 let refreshPromise: Promise<TokenResponse> | null = null;
 
