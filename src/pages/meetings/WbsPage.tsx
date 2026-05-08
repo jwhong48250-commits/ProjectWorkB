@@ -645,6 +645,7 @@ export default function WbsPage() {
   const [epicInput, setEpicInput]   = useState('')
   const [addingTask, setAddingTask] = useState<string | null>(null)
   const [taskInput, setTaskInput]   = useState('')
+  const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set())
 
   // ── 뷰 모드
   const [viewMode, setViewMode] = useState<'table' | 'gantt'>('table')
@@ -1013,21 +1014,10 @@ export default function WbsPage() {
 
       if (result.changed.length === 0) { showToast('이미 최신 상태입니다.'); return }
 
-      const newHighlighted = new Set<string>()
-      result.changed.forEach(({ task_id, field, new: newVal }) => {
-        const id = String(task_id)
-        newHighlighted.add(id)
-        setEpics((prev) => prev.map((epic) => ({
-          ...epic,
-          tasks: epic.tasks.map((t) => {
-            if (t.id !== id) return t
-            if (field === 'status') return { ...t, status: toStatus(newVal) }
-            if (field === 'title') return { ...t, title: newVal }
-            return t
-          }),
-        })))
-      })
-      setHighlighted(newHighlighted)
+      const changedIds = new Set(result.changed.map((c) => String(c.task_id)))
+      const fresh = await getWbs(meetingId!, workspaceId)
+      setEpics(fromApi(fresh.epics))
+      setHighlighted(changedIds)
       setTimeout(() => setHighlighted(new Set()), 3000)
       showToast(`JIRA에서 ${result.changed.length}개 변경사항을 가져왔습니다.`)
     } catch {
@@ -1471,15 +1461,47 @@ export default function WbsPage() {
                             </td>
                           )}
 
-                          {/* 작업명 */}
-                          <td className="px-4 py-2.5 pl-10">
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <GripVertical size={12} className="shrink-0 text-muted-foreground/30 group-hover:text-muted-foreground/60 transition-colors" />
-                              <InlineText
-                                value={task.title}
-                                onSave={(v) => { if (!v.trim()) return; updateTask(epic.id, task.id, { title: v }); saveTaskField(epic.id, task.id, { title: v }) }}
-                                className="text-sm text-foreground"
-                              />
+                          {/* 작업명 + 내용 인라인 */}
+                          <td className="px-4 py-2 pl-10">
+                            <div className="flex items-start gap-1.5 min-w-0">
+                              <GripVertical size={12} className="shrink-0 mt-1 text-muted-foreground/30 group-hover:text-muted-foreground/60 transition-colors" />
+                              <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                                <InlineText
+                                  value={task.title}
+                                  onSave={(v) => { if (!v.trim()) return; updateTask(epic.id, task.id, { title: v }); saveTaskField(epic.id, task.id, { title: v }) }}
+                                  className="text-sm text-foreground"
+                                />
+                                {expandedTasks.has(task.id) ? (
+                                  <textarea
+                                    autoFocus
+                                    defaultValue={task.content ?? ''}
+                                    onBlur={(e) => {
+                                      const v = e.target.value.trim() || null
+                                      if (v !== (task.content ?? null)) {
+                                        updateTask(epic.id, task.id, { content: v ?? undefined })
+                                        saveTaskField(epic.id, task.id, { content: v })
+                                      }
+                                      setExpandedTasks(prev => { const n = new Set(prev); n.delete(task.id); return n })
+                                    }}
+                                    onKeyDown={(e) => { if (e.key === 'Escape') e.currentTarget.blur() }}
+                                    rows={2}
+                                    className="w-full text-mini text-muted-foreground bg-muted/40 rounded px-1.5 py-1 outline-none resize-none border border-accent/40 placeholder:text-muted-foreground/40 leading-relaxed"
+                                    placeholder="내용을 입력하세요..."
+                                  />
+                                ) : (
+                                  <button
+                                    onClick={() => setExpandedTasks(prev => new Set(prev).add(task.id))}
+                                    className={clsx(
+                                      'text-left text-mini leading-relaxed transition-colors cursor-text',
+                                      task.content
+                                        ? 'text-muted-foreground/70 hover:text-muted-foreground'
+                                        : 'text-muted-foreground/0 group-hover:text-muted-foreground/30 italic',
+                                    )}
+                                  >
+                                    {task.content ?? '메모 추가...'}
+                                  </button>
+                                )}
+                              </div>
                               {task.urgency === 'urgent' && (
                                 <span className="shrink-0 text-micro px-1 py-0.5 rounded bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 font-semibold">긴급</span>
                               )}
