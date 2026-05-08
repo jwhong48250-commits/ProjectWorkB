@@ -1,6 +1,5 @@
-import { Outlet } from 'react-router-dom'
-import { useThemePreference } from '../../hooks/useThemePreference'
-import ChatFAB from '../chat/ChatFAB'
+import { Outlet } from "react-router-dom";
+import { useThemePreference } from "../../hooks/useThemePreference";
 
 /**
  * 사이드바·탑바 없이 전체 화면을 사용하는 레이아웃.
@@ -8,11 +7,10 @@ import ChatFAB from '../chat/ChatFAB'
  * 테마 훅을 직접 호출해 OS 다크 모드 변경에도 반응.
  */
 export default function FullscreenLayout() {
-  useThemePreference()
-  return (
-    <div className="h-screen overflow-hidden bg-background">
-      <Outlet />
-      <ChatFAB />
-    </div>
-  )
+    useThemePreference();
+    return (
+        <div className="h-screen overflow-hidden bg-background">
+            <Outlet />
+        </div>
+    );
 }

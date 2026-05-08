@@ -47,48 +47,59 @@ function MeetingSelectorCard({
     onConfirm,
 }: {
     meetings: PastMeeting[];
-    onConfirm: (ids: number[] | null) => void; // null = 전체
+    onConfirm: (ids: number[] | null) => void;
 }) {
-    const [mode, setMode] = useState<"ask" | "select">("ask");
     const [checked, setChecked] = useState<Set<number>>(new Set());
+
     if (meetings.length === 0) {
         return (
-            <div className="mx-2 p-3 rounded-xl bg-muted border border-border text-sm text-muted-foreground">
+            <div className="mx-2 p-3 rounded-xl bg-muted border border-border text-xs text-muted-foreground">
                 선택할 수 있는 회의가 없습니다.
             </div>
         );
     }
 
-    if (mode === "ask") {
-        return (
-            <div className="mx-2 p-3 rounded-xl bg-muted border border-border text-sm">
-                <p className="text-foreground mb-2">어떤 회의를 기준으로 할까요?</p>
-                <div className="flex gap-2">
-                    <button
-                        onClick={() => onConfirm(null)} // null = 전체 검색
-                        className="px-3 py-1.5 rounded-lg bg-accent text-accent-foreground text-xs
-hover:bg-accent/90 transition-colors"
-                    >
-                        전체 회의
-                    </button>
-                    <button
-                        onClick={() => setMode("select")}
-                        className="px-3 py-1.5 rounded-lg border border-border text-xs hover:bg-muted/60
-transition-colors"
-                    >
-                        회의 선택 ▾
-                    </button>
-                </div>
-            </div>
-        );
+    function fmtDate(dateStr: string) {
+        if (!dateStr) return "";
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return "";
+        const mo = d.getMonth() + 1;
+        const da = d.getDate();
+        const hh = d.getHours().toString().padStart(2, "0");
+        const mm = d.getMinutes().toString().padStart(2, "0");
+        return `${mo}/${da} ${hh}:${mm}`;
     }
 
     return (
-        <div className="mx-2 p-3 rounded-xl bg-muted border border-border text-sm">
-            <p className="text-foreground mb-2">검색할 회의를 선택하세요 (복수 선택 가능)</p>
-            <div className="flex flex-col gap-1.5 mb-3 max-h-40 overflow-y-auto">
-                {meetings.map((m) => (
-                    <label key={m.meeting_id} className="flex items-center gap-2 cursor-pointer">
+        <div className="mx-2 rounded-xl border border-border text-sm" style={{ backgroundColor: "var(--card)" }}>
+            <div className="px-3 py-2 border-b border-border">
+                <p className="text-xs font-semibold" style={{ color: "var(--foreground)" }}>회의를 선택해주세요</p>
+                <p className="text-xs opacity-60 mt-0.5" style={{ color: "var(--foreground)" }}>복수 선택 가능</p>
+            </div>
+            <div className="flex flex-col">
+                {/* 전체 선택 버튼 */}
+                <div className="px-3 py-2 border-b border-border flex justify-end">
+                    <button
+                        onClick={() => setChecked(
+                            checked.size === meetings.length
+                                ? new Set()
+                                : new Set(meetings.map((m) => m.meeting_id))
+                        )}
+                        className="text-xs px-2.5 py-1 rounded-md border border-border hover:bg-accent/10 transition-colors"
+                        style={{ color: "var(--foreground)" }}
+                    >
+                        {checked.size === meetings.length ? "전체 해제" : "전체 선택"}
+                    </button>
+                </div>
+                {meetings.map((m, i) => (
+                    <label
+                        key={m.meeting_id}
+                        className={clsx(
+                            "flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors",
+                            i < meetings.length - 1 && "border-b border-border",
+                            checked.has(m.meeting_id) ? "bg-accent/10" : "hover:bg-accent/5",
+                        )}
+                    >
                         <input
                             type="checkbox"
                             checked={checked.has(m.meeting_id)}
@@ -97,19 +108,26 @@ transition-colors"
                                 e.target.checked ? next.add(m.meeting_id) : next.delete(m.meeting_id);
                                 setChecked(next);
                             }}
-                            className="accent-accent"
+                            className="accent-accent shrink-0"
                         />
-                        <span className="text-foreground text-xs">{m.title}</span>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium truncate" style={{ color: "var(--foreground)" }}>{m.title}</p>
+                            {m.started_at && (
+                                <p className="text-xs opacity-50 mt-0.5" style={{ color: "var(--foreground)" }}>{fmtDate(m.started_at)}</p>
+                            )}
+                        </div>
                     </label>
                 ))}
             </div>
-            <button
-                disabled={checked.size === 0}
-                onClick={() => onConfirm([...checked])}
-                className="px-3 py-1.5 rounded-lg bg-accent text-accent-foreground text-xs disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-                확인 ({checked.size}개 선택)
-            </button>
+            <div className="px-3 py-2 border-t border-border">
+                <button
+                    disabled={checked.size === 0}
+                    onClick={() => onConfirm([...checked])}
+                    className="w-full py-1.5 rounded-lg bg-accent text-accent-foreground text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-accent/90 transition-colors"
+                >
+                    {checked.size > 0 ? `${checked.size}개 선택 완료` : "선택 후 확인"}
+                </button>
+            </div>
         </div>
     );
 }
@@ -135,6 +153,10 @@ export default function ChatFAB() {
     const [pastMeetingsLoaded, setPastMeetingsLoaded] = useState(false);
     const [pendingMessage, setPendingMessage] = useState<string | null>(null);
     const [showMeetingSelector, setShowMeetingSelector] = useState(false);
+    const [candidateMeetings, setCandidateMeetings] = useState<PastMeeting[]>([]);
+
+    const [inputHistory, setInputHistory] = useState<string[]>([]);
+    const [historyIndex, setHistoryIndex] = useState(-1);
 
     const [showHistory, setShowHistory] = useState(false);
     const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -270,6 +292,15 @@ export default function ChatFAB() {
         }
     }, [open, messages]);
 
+    // 선택창 등장 시 스크롤 내리기
+    useEffect(() => {
+        if (showMeetingSelector) {
+            setTimeout(() => {
+                bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+            }, 50);
+        }
+    }, [showMeetingSelector]);
+
     // 실제 API 전송 - handleSend와 MeetingSelectorCard 확인 후 공통 사용
     async function sendMessage(text: string, meetingIds: number[] | null) {
         setIsLoading(true);
@@ -292,27 +323,17 @@ export default function ChatFAB() {
                 },
             ]);
 
-            // 백엔드가 회의 선택을 요청하는 경우(past_summary + 선택 안내) → 선택 UI 표시
-            if (
-                (res.function_type === "past_summary" || res.function_type === "quick_report") &&
-                res.answer.includes("선택해주세요")
-            ) {
-                if (pastMeetings.length > 0) {
-                    setPendingMessage(text);
-                    setShowMeetingSelector(true);
-                } else {
-                    // 초기 로드 실패 시 재시도
-                    getPastMeetings(workspaceId)
-                        .then(({ meetings }) => {
-                            setPastMeetings(meetings);
-                            setPastMeetingsLoaded(true);
-                            if (meetings.length > 0) {
-                                setPendingMessage(text);
-                                setShowMeetingSelector(true);
-                            }
-                        })
-                        .catch(() => {});
-                }
+            // 백엔드가 candidate_meetings를 내려주면 선택 UI 표시 (function_type 무관)
+            const candidates: PastMeeting[] | undefined = res.result?.candidate_meetings;
+            if (candidates && candidates.length > 0) {
+                setCandidateMeetings(candidates);
+                setPendingMessage(text);
+                setShowMeetingSelector(true);
+            } else if (res.answer.includes("선택해주세요") && pastMeetings.length > 0) {
+                // agent 경로로 왔지만 선택이 필요한 경우 → pastMeetings로 fallback
+                setCandidateMeetings(pastMeetings);
+                setPendingMessage(text);
+                setShowMeetingSelector(true);
             }
         } catch {
             // 에러 시 인라인 메시지로 표시 - 토스트 없이 대화 흐름 안에서 처리
@@ -386,18 +407,9 @@ export default function ChatFAB() {
             },
         ]);
         setInput("");
+        setHistoryIndex(-1);
+        setInputHistory((prev) => [text, ...prev].slice(0, 50));
         setShowChips(false); // 첫 메시지 전송 후 칩 숨기기
-
-        const isPastMeetingQuery = /이전|지난|과거|전 회의/.test(text);
-        const isReportQuery = /보고서|간이보고서/.test(text);
-        const hasDateRange = /\d+월\s*\d+일/.test(text);
-
-        // 이전 회의 관련 질문 && 2개 이상 && 날짜 범위 없음 -> 매번 선택 UI
-        if (pastMeetingsLoaded && pastMeetings.length >= 2 && (isPastMeetingQuery || isReportQuery) && !hasDateRange) {
-            setPendingMessage(text);
-            setShowMeetingSelector(true);
-            return;
-        }
 
         await sendMessage(text, null);
     }
@@ -691,9 +703,10 @@ export default function ChatFAB() {
                             {/* 이전 회의 선택 UI - 2개 이상일 때 메시지 보류 후 표시 */}
                             {showMeetingSelector && (
                                 <MeetingSelectorCard
-                                    meetings={pastMeetings}
+                                    meetings={candidateMeetings.length > 0 ? candidateMeetings : pastMeetings}
                                     onConfirm={(ids) => {
                                         setShowMeetingSelector(false);
+                                        setCandidateMeetings([]);
                                         void sendMessage(pendingMessage ?? "", ids);
                                         setPendingMessage("");
                                     }}
@@ -757,7 +770,25 @@ export default function ChatFAB() {
                                 ref={inputRef}
                                 type="text"
                                 value={input}
-                                onChange={(e) => setInput(e.target.value)}
+                                onChange={(e) => { setInput(e.target.value); setHistoryIndex(-1); }}
+                                onKeyDown={(e) => {
+                                    if (e.key === "ArrowUp" && inputHistory.length > 0) {
+                                        e.preventDefault();
+                                        const next = Math.min(historyIndex + 1, inputHistory.length - 1);
+                                        setHistoryIndex(next);
+                                        setInput(inputHistory[next]);
+                                    } else if (e.key === "ArrowDown") {
+                                        e.preventDefault();
+                                        if (historyIndex <= 0) {
+                                            setHistoryIndex(-1);
+                                            setInput("");
+                                        } else {
+                                            const next = historyIndex - 1;
+                                            setHistoryIndex(next);
+                                            setInput(inputHistory[next]);
+                                        }
+                                    }
+                                }}
                                 placeholder="무엇이든 물어보세요..."
                                 disabled={isLoading}
                                 className="flex-1 bg-transparent outline-none text-sm placeholder:text-muted-foreground disabled:opacity-50"
