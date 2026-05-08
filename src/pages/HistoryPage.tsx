@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Search, User, ChevronDown, Clock, X } from "lucide-react";
 import clsx from "clsx";
 import Badge from "../components/ui/Badge";
-import { formatDateFull, durationMinutes } from "../utils/format";
+import { formatDateFull } from "../utils/format";
 import { persistMeetingSnapshot } from "../utils/meetingRoutes";
 import { getCurrentWorkspaceId, WORKSPACE_CHANGED_EVENT } from "../utils/workspace";
 import type { Meeting, Participant } from "../types/meeting";
@@ -340,7 +340,10 @@ export default function HistoryPage() {
 function MeetingRow({ meeting, onClick }: { meeting: MeetingHistoryItem; onClick: () => void }) {
     const startAt = pickStartAt(meeting);
     const endAt = meeting.ended_at ?? undefined;
-    const duration = endAt ? durationMinutes(startAt, endAt) : null;
+    // 히스토리: 1분 미만은 0분으로 보여주기 위해 "내림" 기준 사용
+    const duration = endAt
+        ? Math.max(0, Math.floor((new Date(endAt).getTime() - new Date(startAt).getTime()) / 60_000))
+        : null;
 
     return (
         <div
@@ -371,7 +374,7 @@ function MeetingRow({ meeting, onClick }: { meeting: MeetingHistoryItem; onClick
             {/* Date + duration */}
             <div className="flex flex-col items-end justify-center gap-0.5 text-right">
                 <span className="text-sm text-foreground whitespace-nowrap">{formatDateFull(startAt)}</span>
-                {duration && (
+                {duration !== null && (
                     <span className="flex items-center gap-1 text-mini text-muted-foreground">
                         <Clock size={10} />
                         {duration}분
