@@ -5,7 +5,7 @@ export interface SendMessageResponse {
     session_id: string
     function_type: string
     answer: string
-    result: { sources?: WebSource[]; action_button?: string | null }
+    result: { sources?: WebSource[]; action_button?: string | null; candidate_meetings?: PastMeeting[] }
     timestamp: string
 }
 
@@ -23,7 +23,7 @@ export interface HistoryResponse {
 export interface PastMeeting {
     meeting_id: number
     title: string
-    created_at: string
+    started_at: string
 }
 
 export interface PastMeetingsResponse {
