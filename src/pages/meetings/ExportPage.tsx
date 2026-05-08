@@ -7,7 +7,7 @@ import {
 import clsx from 'clsx'
 import { getIntegrations, type IntegrationItem, type ServiceName } from '../../api/integrations'
 import {
-  exportBatch, suggestNextMeeting, registerNextMeeting,
+  exportBatch, suggestNextMeeting,
   type BatchExportServiceResult, type TimeSlot,
 } from '../../api/actions'
 import { useAuth } from '../../context/AuthContext'
@@ -69,8 +69,6 @@ export default function ExportPage() {
   const [slots, setSlots] = useState<TimeSlot[]>([])
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
   const [newMeetingTitle, setNewMeetingTitle] = useState('')
-  const [registering, setRegistering] = useState(false)
-  const [registeredEventId, setRegisteredEventId] = useState<string | null>(null)
 
   useEffect(() => {
     getIntegrations(workspaceId)
@@ -156,7 +154,6 @@ export default function ExportPage() {
     setSuggestLoading(true)
     setSlots([])
     setSelectedSlot(null)
-    setRegisteredEventId(null)
     try {
       const res = await suggestNextMeeting(meetingId, workspaceId, { duration_minutes: 60 })
       setSlots(res.slots)
@@ -168,21 +165,22 @@ export default function ExportPage() {
     }
   }
 
-  async function handleRegister() {
-    if (!meetingId || !selectedSlot || !newMeetingTitle.trim()) return
-    setRegistering(true)
-    try {
-      const res = await registerNextMeeting(meetingId, workspaceId, {
-        title: newMeetingTitle,
-        scheduled_at: selectedSlot.start,
-      })
-      setRegisteredEventId(res.event_id)
-      showToast('Google Calendar에 일정이 등록되었습니다.')
-    } catch {
-      showToast('일정 등록 실패. 다시 시도해주세요.', 'error')
-    } finally {
-      setRegistering(false)
-    }
+  function handleNavigate() {
+    if (!selectedSlot || !newMeetingTitle.trim()) return
+    navigate('/meetings/new', {
+      state: {
+        draftMeeting: {
+          id: '',
+          title: newMeetingTitle.trim(),
+          startAt: selectedSlot.start,
+          status: 'upcoming',
+          participants: [],
+          actionItemCount: 0,
+          decisionCount: 0,
+          tags: [],
+        },
+      },
+    })
   }
 
   function formatSlot(slot: TimeSlot) {
@@ -385,10 +383,6 @@ export default function ExportPage() {
               <Calendar size={13} /> 연결
             </button>
           </div>
-        ) : registeredEventId ? (
-          <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400 font-medium">
-            <Check size={16} /> Google Calendar에 다음 회의 일정이 등록되었습니다.
-          </div>
         ) : (
           <>
             <p className="text-sm text-muted-foreground mb-3">
@@ -435,16 +429,16 @@ export default function ExportPage() {
                       type="text"
                       value={newMeetingTitle}
                       onChange={(e) => setNewMeetingTitle(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleRegister()}
+                      onKeyDown={(e) => e.key === 'Enter' && handleNavigate()}
                       placeholder="다음 회의 제목 입력"
                       className="flex-1 h-9 px-3 rounded-lg border border-border bg-card text-sm outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-colors"
                     />
                     <button
-                      onClick={handleRegister}
-                      disabled={registering || !newMeetingTitle.trim()}
+                      onClick={handleNavigate}
+                      disabled={!newMeetingTitle.trim()}
                       className="shrink-0 flex items-center gap-1.5 h-9 px-3 rounded-lg bg-accent text-accent-foreground text-mini font-medium hover:bg-accent/90 transition-colors disabled:opacity-50"
                     >
-                      {registering ? '등록 중...' : '캘린더에 등록'}
+                      <ExternalLink size={12} /> 회의 생성 페이지로
                     </button>
                   </div>
                 )}

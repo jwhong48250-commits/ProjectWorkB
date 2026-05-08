@@ -12,8 +12,7 @@ import {
   generateMinutes, getMinutes, ensureMinutes,
   getMinutesPdfPreview, downloadMinutesPdf,
   exportSlack, exportGoogleCalendar,
-  suggestNextMeeting, registerNextMeeting,
-  deleteNextMeeting,
+  suggestNextMeeting,
   type MinutesResponse, type TimeSlot,
   type MinutesPdfPreview,
 } from '../../api/actions'
@@ -514,8 +513,6 @@ function ExportTab({
   const [slots, setSlots] = useState<TimeSlot[]>([])
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
   const [titleInput, setTitleInput] = useState('다음 회의')
-  const [registering, setRegistering] = useState(false)
-  const [registeredEvent, setRegisteredEvent] = useState<{ event_id: string; scheduled_at: string } | null>(null)
 
   useEffect(() => {
     getIntegrations(workspaceId)
@@ -563,7 +560,6 @@ function ExportTab({
     setSuggesting(true)
     setSlots([])
     setSelectedSlot(null)
-    setRegisteredEvent(null)
     try {
       const res = await suggestNextMeeting(meetingId, workspaceId)
       setSlots(res.slots)
@@ -575,36 +571,22 @@ function ExportTab({
     }
   }
 
-  async function handleRegister() {
-    if (!selectedSlot) return
-    setRegistering(true)
-    try {
-      const res = await registerNextMeeting(meetingId, workspaceId, {
-        title: titleInput,
-        scheduled_at: selectedSlot.start,
-        participant_ids: [],
-      })
-      setRegisteredEvent({ event_id: res.event_id, scheduled_at: selectedSlot.start })
-      setSlots([])
-      setSelectedSlot(null)
-      showToast('구글 캘린더에 일정이 등록되었습니다.')
-    } catch {
-      showToast('일정 등록에 실패했습니다.', 'error')
-    } finally {
-      setRegistering(false)
-    }
-  }
-
-  async function handleDeleteEvent() {
-    if (!registeredEvent) return
-    if (!confirm('등록된 일정을 삭제하시겠습니까?')) return
-    try {
-      await deleteNextMeeting(meetingId, workspaceId, registeredEvent.event_id)
-      setRegisteredEvent(null)
-      showToast('일정이 삭제되었습니다.')
-    } catch {
-      showToast('삭제에 실패했습니다.', 'error')
-    }
+  function handleNavigate() {
+    if (!selectedSlot || !titleInput.trim()) return
+    navigate('/meetings/new', {
+      state: {
+        draftMeeting: {
+          id: '',
+          title: titleInput.trim(),
+          startAt: selectedSlot.start,
+          status: 'upcoming',
+          participants: [],
+          actionItemCount: 0,
+          decisionCount: 0,
+          tags: [],
+        },
+      },
+    })
   }
 
   return (
@@ -685,19 +667,17 @@ function ExportTab({
             <Sparkles size={14} className="text-accent" />
             <p className="text-sm font-medium text-accent">AI 다음 회의 일정 제안</p>
           </div>
-          {!registeredEvent && (
-            <button
-              onClick={handleSuggest}
-              disabled={suggesting || !isConnected('google_calendar')}
-              className="flex items-center gap-1.5 h-7 px-3 rounded-lg bg-accent text-accent-foreground text-mini font-medium hover:bg-accent/90 disabled:opacity-60 transition-colors"
-              title={!isConnected('google_calendar') ? 'Google Calendar 연동이 필요합니다' : ''}
-            >
-              {suggesting ? <><Loader2 size={11} className="animate-spin" /> 분석 중...</> : '일정 추천받기'}
-            </button>
-          )}
+          <button
+            onClick={handleSuggest}
+            disabled={suggesting || !isConnected('google_calendar')}
+            className="flex items-center gap-1.5 h-7 px-3 rounded-lg bg-accent text-accent-foreground text-mini font-medium hover:bg-accent/90 disabled:opacity-60 transition-colors"
+            title={!isConnected('google_calendar') ? 'Google Calendar 연동이 필요합니다' : ''}
+          >
+            {suggesting ? <><Loader2 size={11} className="animate-spin" /> 분석 중...</> : '일정 추천받기'}
+          </button>
         </div>
 
-        {!suggesting && slots.length === 0 && !registeredEvent && (
+        {!suggesting && slots.length === 0 && (
           <div className="flex flex-col gap-1">
             <p className="text-mini text-muted-foreground">참석자 가용 시간 분석 → 최적 일정 3개 추천</p>
             <div className="flex items-center gap-3 mt-0.5">
@@ -711,7 +691,7 @@ function ExportTab({
           </div>
         )}
 
-        {slots.length > 0 && !registeredEvent && (
+        {slots.length > 0 && (
           <div className="flex flex-col gap-2 mt-1">
             <p className="text-mini text-muted-foreground">추천 일정 중 하나를 선택하세요</p>
             {slots.map((slot, i) => (
@@ -733,34 +713,22 @@ function ExportTab({
                 <input
                   value={titleInput}
                   onChange={(e) => setTitleInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleNavigate()}
                   placeholder="회의 제목"
                   className="flex-1 h-8 px-3 rounded-lg border border-border bg-background text-sm outline-none focus:border-accent"
                 />
                 <button
-                  onClick={handleRegister}
-                  disabled={registering}
+                  onClick={handleNavigate}
+                  disabled={!titleInput.trim()}
                   className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-accent text-accent-foreground text-mini font-medium hover:bg-accent/90 disabled:opacity-60"
                 >
-                  {registering ? <Loader2 size={11} className="animate-spin" /> : '캘린더 등록'}
+                  <ExternalLink size={11} /> 회의 생성 페이지로
                 </button>
               </div>
             )}
           </div>
         )}
 
-        {registeredEvent && (
-          <div className="flex items-center justify-between mt-1">
-            <div>
-              <p className="text-sm font-medium text-green-600 dark:text-green-400">✓ 일정 등록 완료</p>
-              <p className="text-mini text-muted-foreground mt-0.5">
-                {new Date(registeredEvent.scheduled_at).toLocaleString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit' })}
-              </p>
-            </div>
-            <button onClick={handleDeleteEvent} className="text-mini text-muted-foreground hover:text-red-500 transition-colors">
-              삭제
-            </button>
-          </div>
-        )}
       </div>
     </div>
   )

@@ -289,6 +289,7 @@ export default function IntegrationsSettingsPage() {
             item={item}
             onConnect={() => handleConnect(item.service)}
             onDisconnect={() => handleDisconnect(item.service)}
+            onReauthenticate={() => handleConnect(item.service)}
             slackChannels={item.service === 'slack' ? slackChannels : undefined}
             slackSelectedChannelId={item.service === 'slack' ? item.selected_channel_id : undefined}
             channelLoading={item.service === 'slack' ? channelLoading : false}
@@ -536,6 +537,7 @@ function IntegrationCard({
   item,
   onConnect,
   onDisconnect,
+  onReauthenticate,
   slackChannels,
   slackSelectedChannelId,
   channelLoading,
@@ -550,6 +552,7 @@ function IntegrationCard({
   item: IntegrationItem
   onConnect: () => void
   onDisconnect: () => void
+  onReauthenticate: () => void
   slackChannels?: SlackChannel[]
   slackSelectedChannelId?: string
   channelLoading?: boolean
@@ -588,7 +591,11 @@ function IntegrationCard({
           </div>
           <p className="text-mini text-muted-foreground">{meta.description}</p>
           {(healthStatus === 'expired' || healthStatus === 'revoked') && (
-            <p className="text-micro text-red-500 mt-1">재연동이 필요합니다.</p>
+            <p className="text-micro text-amber-600 dark:text-amber-400 mt-1">
+              {healthStatus === 'expired'
+                ? '토큰이 만료되었습니다. 재인증으로 갱신하세요.'
+                : '접근 권한이 해제되었습니다. 재인증이 필요합니다.'}
+            </p>
           )}
         </div>
       </div>
@@ -664,12 +671,31 @@ function IntegrationCard({
 
       <div className="flex items-center gap-2 justify-end">
         {isConnected ? (
-          <button
-            onClick={onDisconnect}
-            className="flex items-center gap-1.5 h-8 px-3 rounded-lg border border-red-200 dark:border-red-800 text-red-500 text-sm hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
-          >
-            <Unlink size={13} /> 연결 해제
-          </button>
+          <>
+            {(healthStatus === 'expired' || healthStatus === 'revoked') ? (
+              <>
+                <button
+                  onClick={onReauthenticate}
+                  className="flex items-center gap-1.5 h-8 px-4 rounded-lg bg-accent text-accent-foreground text-sm font-medium hover:bg-accent/90 transition-colors"
+                >
+                  재인증
+                </button>
+                <button
+                  onClick={onDisconnect}
+                  className="flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border text-muted-foreground text-sm hover:bg-muted/50 transition-colors"
+                >
+                  <Unlink size={13} /> 연결 해제
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={onDisconnect}
+                className="flex items-center gap-1.5 h-8 px-3 rounded-lg border border-red-200 dark:border-red-800 text-red-500 text-sm hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+              >
+                <Unlink size={13} /> 연결 해제
+              </button>
+            )}
+          </>
         ) : (
           <button
             onClick={onConnect}

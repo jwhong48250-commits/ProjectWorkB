@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import clsx from 'clsx'
-import { Sparkles, Calendar } from 'lucide-react'
+import { Sparkles, Calendar, ExternalLink, Loader2, X } from 'lucide-react'
 import MeetingCard from '../components/home/MeetingCard'
 import WeeklyStatsCard from '../components/home/WeeklyStats'
 import WorkspaceMembersAside from '../components/home/WorkspaceMembersAside'
@@ -9,6 +9,7 @@ import type { MeetingStatus } from '../types/meeting'
 import type { Meeting, WeeklyStats } from '../types/meeting'
 import { fetchWorkspaceDashboard } from '../api/dashboard'
 import { persistMeetingSnapshot } from '../utils/meetingRoutes'
+import { suggestNextMeeting, type TimeSlot } from '../api/actions'
 import { getCurrentWorkspaceId, WORKSPACE_CHANGED_EVENT } from '../utils/workspace'
 
 type Tab = MeetingStatus
@@ -25,6 +26,10 @@ export default function HomePage() {
   const [weeklyStats, setWeeklyStats] = useState<WeeklyStats | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [workspaceId, setWorkspaceId] = useState(() => getCurrentWorkspaceId())
+  const navigate = useNavigate()
+  const [aiModalOpen, setAiModalOpen] = useState(false)
+  const [aiMeetingId, setAiMeetingId] = useState('')
+  const [aiMeetingTitle, setAiMeetingTitle] = useState('')
 
   useEffect(() => {
     function onWsChanged(e: Event) {
@@ -59,6 +64,7 @@ export default function HomePage() {
   )
 
   return (
+    <>
     <div className="flex h-full">
       {/* ── Main feed ─────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto min-w-0">
@@ -73,10 +79,21 @@ export default function HomePage() {
               </p>
             </div>
             {/* AI 추천 일정 제안 — placeholder */}
-            <button className="self-start flex items-center gap-1.5 h-8 px-3 rounded border border-accent/40 text-sm text-accent font-medium hover:bg-accent-subtle transition-colors">
+            <button
+              onClick={() => {
+                const latestDone = meetings.find((m) => m.status === 'completed')
+                if (!latestDone) {
+                  navigate('/meetings/new')
+                  return
+                }
+                setAiMeetingId(String(latestDone.id))
+                setAiMeetingTitle(latestDone.title)
+                setAiModalOpen(true)
+              }}
+              className="self-start flex items-center gap-1.5 h-8 px-3 rounded border border-accent/40 text-sm text-accent font-medium hover:bg-accent-subtle transition-colors"
+            >
               <Sparkles size={13} />
               AI 일정 제안
-              {/* TODO: trigger AI meeting scheduling */}
             </button>
           </div>
 
@@ -153,6 +170,15 @@ export default function HomePage() {
         </div>
       </aside>
     </div>
+    {aiModalOpen && aiMeetingId && (
+      <AiScheduleModal
+        meetingId={aiMeetingId}
+        meetingTitle={aiMeetingTitle}
+        workspaceId={workspaceId}
+        onClose={() => setAiModalOpen(false)}
+      />
+    )}
+    </>
   )
 }
 
@@ -198,5 +224,178 @@ function NextMeetingBanner({ meetings }: { meetings: Meeting[] }) {
         {next.participants.length}명 참석 예정
       </p>
     </Link>
+  )
+}
+
+function AiScheduleModal({
+  meetingId, meetingTitle, workspaceId, onClose,
+}: {
+  meetingId: string
+  meetingTitle: string
+  workspaceId: number
+  onClose: () => void
+}) {
+  const navigate = useNavigate()
+  const [step, setStep] = useState<'suggest' | 'slots'>('suggest')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [slots, setSlots] = useState<TimeSlot[]>([])
+  const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
+  const [title, setTitle] = useState('')
+
+  async function handleSuggest() {
+    setError(null)
+    setLoading(true)
+    try {
+      const res = await suggestNextMeeting(meetingId, workspaceId, { duration_minutes: 60 })
+      if (!res.slots || res.slots.length === 0) {
+        setError('추천 가능한 빈 시간이 없습니다. 참석자 캘린더를 확인해주세요.')
+        return
+      }
+      setSlots(res.slots)
+      setSelectedSlot(res.slots[0])
+      setStep('slots')
+    } catch {
+      setError('일정 조회에 실패했습니다. Slack · Google Calendar 연동 상태를 확인해주세요.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function formatSlot(slot: TimeSlot) {
+    const start = new Date(slot.start)
+    const end = new Date(slot.end)
+    const date = start.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })
+    const startTime = start.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+    const endTime = end.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+    return `${date}  ${startTime} — ${endTime}`
+  }
+
+  function handleNavigate() {
+    if (!selectedSlot || !title.trim()) return
+    navigate('/meetings/new', {
+      state: {
+        draftMeeting: {
+          id: '',
+          title: title.trim(),
+          startAt: selectedSlot.start,
+          status: 'upcoming',
+          participants: [],
+          actionItemCount: 0,
+          decisionCount: 0,
+          tags: [],
+        },
+      },
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-card rounded-xl border border-border shadow-2xl w-full max-w-sm mx-4">
+        <div className="flex items-start justify-between px-6 py-4 border-b border-border">
+          <div>
+            <h2 className="text-base font-semibold text-foreground">AI 일정 제안</h2>
+            <p className="text-mini text-muted-foreground mt-0.5">
+              {step === 'suggest'
+                ? `"${meetingTitle}" 기준으로 분석합니다`
+                : '일정을 선택하고 회의 제목을 입력하세요'}
+            </p>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors mt-0.5">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          {step === 'suggest' ? (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Slack 채널 멤버의 가용 시간을 분석해 최적의 회의 시간 3개를 추천합니다. Slack · Google Calendar 연동이 필요합니다.
+              </p>
+              {error && (
+                <p className="text-mini text-red-500 bg-red-50 dark:bg-red-900/20 rounded-lg px-3 py-2">{error}</p>
+              )}
+            </>
+          ) : (
+            <>
+              <div>
+                <p className="text-sm font-medium text-foreground mb-2">추천 일정 선택</p>
+                <div className="space-y-2">
+                  {slots.map((slot, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setSelectedSlot(slot)}
+                      className={clsx(
+                        'w-full flex items-center gap-3 px-4 py-3 rounded-lg border text-left transition-all',
+                        selectedSlot === slot
+                          ? 'border-accent bg-accent/10 ring-1 ring-accent/30'
+                          : 'border-border hover:bg-muted/30',
+                      )}
+                    >
+                      <div className={clsx(
+                        'w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0',
+                        selectedSlot === slot ? 'border-accent bg-accent' : 'border-muted-foreground/30',
+                      )}>
+                        {selectedSlot === slot && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                      </div>
+                      <span className="text-sm text-foreground flex-1">{formatSlot(slot)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-foreground mb-1.5">회의 제목 <span className="text-red-500">*</span></p>
+                <input
+                  autoFocus
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleNavigate()}
+                  placeholder="예: Q2 2주차 스프린트 회의"
+                  className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+                />
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="px-6 py-4 border-t border-border flex items-center gap-2">
+          {step === 'slots' && (
+            <button
+              onClick={() => { setStep('suggest'); setError(null) }}
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors mr-auto"
+            >
+              ← 다시
+            </button>
+          )}
+          <div className={clsx('flex gap-2', step === 'suggest' && 'ml-auto')}>
+            <button
+              onClick={onClose}
+              className="h-8 px-4 rounded-lg border border-border text-sm text-muted-foreground hover:bg-muted/50 transition-colors"
+            >
+              취소
+            </button>
+            {step === 'suggest' ? (
+              <button
+                onClick={handleSuggest}
+                disabled={loading}
+                className="h-8 px-4 rounded-lg bg-accent text-accent-foreground text-sm font-medium hover:bg-accent/90 disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {loading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                {loading ? '조회 중...' : 'AI 일정 추천'}
+              </button>
+            ) : (
+              <button
+                onClick={handleNavigate}
+                disabled={!selectedSlot || !title.trim()}
+                className="h-8 px-4 rounded-lg bg-accent text-accent-foreground text-sm font-medium hover:bg-accent/90 disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <ExternalLink size={12} /> 회의 생성 페이지로
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
