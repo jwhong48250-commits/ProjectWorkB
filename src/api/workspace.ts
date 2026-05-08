@@ -1,5 +1,6 @@
 import { apiRequest } from './client'
 import { getApiOrigin } from './baseUrl'
+import { isUsableWorkspaceLogoUrl } from '../utils/workspaceLogo'
 
 export type UserRole = 'admin' | 'member' | 'viewer'
 
@@ -70,18 +71,32 @@ export interface WorkspaceInviteEmailResponse {
   message: string
 }
 
-export function getWorkspace(workspaceId: number): Promise<WorkspaceResponse> {
-  return apiRequest<WorkspaceResponse>(`/workspaces/${workspaceId}`)
+function toAbsoluteAssetUrl(url: string | null): string | null {
+  if (!isUsableWorkspaceLogoUrl(url)) return null
+  return url.startsWith('http') ? url : `${getApiOrigin()}${url}`
 }
 
-export function updateWorkspace(
+function normalizeWorkspaceResponse(workspace: WorkspaceResponse): WorkspaceResponse {
+  return {
+    ...workspace,
+    logo_url: toAbsoluteAssetUrl(workspace.logo_url),
+  }
+}
+
+export async function getWorkspace(workspaceId: number): Promise<WorkspaceResponse> {
+  const workspace = await apiRequest<WorkspaceResponse>(`/workspaces/${workspaceId}`)
+  return normalizeWorkspaceResponse(workspace)
+}
+
+export async function updateWorkspace(
   workspaceId: number,
   payload: WorkspaceUpdatePayload,
 ): Promise<WorkspaceResponse> {
-  return apiRequest<WorkspaceResponse>(`/workspaces/${workspaceId}`, {
+  const workspace = await apiRequest<WorkspaceResponse>(`/workspaces/${workspaceId}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   })
+  return normalizeWorkspaceResponse(workspace)
 }
 
 export async function uploadWorkspaceLogoFile(
