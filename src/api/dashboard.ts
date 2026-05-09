@@ -1,5 +1,6 @@
 import type { Meeting, MeetingStatus, WeeklyStats, Participant } from "../types/meeting";
 import { apiRequest } from "./client";
+import { createAvatarColorMap, pickAvatarColor } from "../utils/avatarColor";
 
 type BackendMeetingStatus = "scheduled" | "in_progress" | "done";
 
@@ -55,19 +56,11 @@ const DEFAULT_TOP_PARTICIPANT: Participant = {
     color: "#64748b",
 };
 
-const DASHBOARD_PARTICIPANT_COLORS = [
-    "#6b78f6",
-    "#22c55e",
-    "#f97316",
-    "#ec4899",
-    "#eab308",
-    "#14b8a6",
-    "#8b5cf6",
-    "#64748b",
-];
-
-function participantFromDashboard(p: BackendDashboardParticipant): Participant {
-    const color = DASHBOARD_PARTICIPANT_COLORS[Math.abs(p.user_id) % DASHBOARD_PARTICIPANT_COLORS.length];
+function participantFromDashboard(
+    p: BackendDashboardParticipant,
+    avatarColorMap: Map<number, string>,
+): Participant {
+    const color = pickAvatarColor(p.user_id, avatarColorMap);
     const initials = p.name.length >= 2 ? p.name.slice(0, 2) : p.name.length === 1 ? p.name : "?";
     return {
         id: `u${p.user_id}`,
@@ -89,7 +82,10 @@ function pickStartAt(m: BackendMeetingItem): string {
     return m.started_at ?? m.scheduled_at ?? m.ended_at ?? new Date().toISOString();
 }
 
-export function mapApiMeetingItemToMeeting(m: BackendMeetingItem): Meeting {
+export function mapApiMeetingItemToMeeting(
+    m: BackendMeetingItem,
+    avatarColorMap: Map<number, string> = createAvatarColorMap((m.participants ?? []).map((p) => p.user_id)),
+): Meeting {
     const apiParticipants = m.participants ?? [];
     return {
         id: String(m.id),
@@ -100,7 +96,7 @@ export function mapApiMeetingItemToMeeting(m: BackendMeetingItem): Meeting {
         startAt: pickStartAt(m),
         endAt: m.ended_at ?? undefined,
         googleCalendarEventId: m.google_calendar_event_id ?? undefined,
-        participants: apiParticipants.map(participantFromDashboard),
+        participants: apiParticipants.map((p) => participantFromDashboard(p, avatarColorMap)),
         agenda: [],
         summary: m.summary ?? undefined,
         actionItemCount: 0,
@@ -111,11 +107,17 @@ export function mapApiMeetingItemToMeeting(m: BackendMeetingItem): Meeting {
 
 export async function fetchWorkspaceDashboard(workspaceId: number) {
     const data = await apiRequest<BackendDashboardResponse>(`/workspaces/${workspaceId}/dashboard`);
+    const allParticipants = [
+        ...data.meetings.in_progress,
+        ...data.meetings.scheduled,
+        ...data.meetings.done,
+    ].flatMap((meeting) => meeting.participants ?? []);
+    const avatarColorMap = createAvatarColorMap(allParticipants.map((p) => p.user_id));
 
     const meetings: Meeting[] = [
-        ...data.meetings.in_progress.map(mapApiMeetingItemToMeeting),
-        ...data.meetings.scheduled.map(mapApiMeetingItemToMeeting),
-        ...data.meetings.done.map(mapApiMeetingItemToMeeting),
+        ...data.meetings.in_progress.map((m) => mapApiMeetingItemToMeeting(m, avatarColorMap)),
+        ...data.meetings.scheduled.map((m) => mapApiMeetingItemToMeeting(m, avatarColorMap)),
+        ...data.meetings.done.map((m) => mapApiMeetingItemToMeeting(m, avatarColorMap)),
     ];
 
     const weeklyStats: WeeklyStats = {

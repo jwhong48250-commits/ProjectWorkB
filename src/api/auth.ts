@@ -115,7 +115,6 @@ export interface SocialSignupPayload {
 }
 
 export interface DeviceSettingsPayload {
-  is_main_device: boolean
   selected_mic_id: string | null
   selected_camera_id: string | null
   mic_enabled: boolean

@@ -146,7 +146,7 @@ export default function SimulatePage() {
           )}
 
           {isPolling && (
-            <div className="flex items-center gap-2 text-sm text-yellow-700 bg-yellow-50 rounded-lg px-4 py-2.5">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground rounded-lg px-4 py-2.5">
               <Loader2 size={16} className="animate-spin" />
               <span>AI 회의 요약 생성 중… 완료되면 자동 이동합니다.</span>
             </div>

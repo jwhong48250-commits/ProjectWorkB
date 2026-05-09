@@ -15,6 +15,7 @@ import {
 } from '../../api/workspace'
 import { useProfileImage } from '../../utils/profileImage'
 import BirthDateSelect from '../../components/auth/BirthDateSelect'
+import { createAvatarColorMap, pickAvatarColor } from '../../utils/avatarColor'
 
 type Role = '관리자' | '멤버' | '뷰어'
 type Gender = 'male' | 'female'
@@ -37,16 +38,11 @@ const BACKEND_TO_ROLE: Record<UserRole, Role> = {
   viewer: '뷰어',
 }
 
-const AVATAR_COLORS = ['#6b78f6', '#22c55e', '#f97316', '#ec4899', '#eab308', '#14b8a6']
 const GENDER_OPTIONS: { value: Gender; label: string }[] = [
   { value: 'female', label: '여성' },
   { value: 'male', label: '남성' },
 ]
 const DESKTOP_MEMBER_GRID = 'md:grid-cols-[minmax(14rem,1fr)_6rem_8.5rem_13rem_4rem_6rem_6rem] md:min-w-[61rem]'
-
-function getAvatarColor(userId: number): string {
-  return AVATAR_COLORS[userId % AVATAR_COLORS.length]
-}
 
 function getInitial(name: string): string {
   return name.trim().charAt(0) || '?'
@@ -68,7 +64,15 @@ function getSettingsErrorMessage(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback
 }
 
-function MemberAvatar({ member, className }: { member: WorkspaceMember; className?: string }) {
+function MemberAvatar({
+  member,
+  avatarColorMap,
+  className,
+}: {
+  member: WorkspaceMember
+  avatarColorMap: Map<number, string>
+  className?: string
+}) {
   const profileImage = useProfileImage(member.user_id)
 
   if (profileImage) {
@@ -84,7 +88,7 @@ function MemberAvatar({ member, className }: { member: WorkspaceMember; classNam
   return (
     <div
       className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0 ${className ?? ''}`}
-      style={{ backgroundColor: getAvatarColor(member.user_id) }}
+      style={{ backgroundColor: pickAvatarColor(member.user_id, avatarColorMap) }}
     >
       {getInitial(member.name)}
     </div>
@@ -101,6 +105,7 @@ export default function MembersSettingsPage() {
   const [issuingInvite, setIssuingInvite] = useState(false)
   const workspaceId = getCurrentWorkspaceId()
   const adminCount = members.filter((member) => member.role === 'admin').length
+  const avatarColorMap = createAvatarColorMap(members.map((member) => member.user_id))
 
   useEffect(() => {
     let active = true
@@ -286,7 +291,7 @@ export default function MembersSettingsPage() {
             {/* Mobile layout */}
             <div className="flex items-center justify-between gap-2 px-4 pt-3 md:hidden">
               <div className="flex items-center gap-2.5 min-w-0">
-                <MemberAvatar member={member} />
+                <MemberAvatar member={member} avatarColorMap={avatarColorMap} />
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-foreground truncate">{member.name}</p>
                   <p className="text-mini text-muted-foreground truncate">{member.email}</p>
@@ -345,7 +350,7 @@ export default function MembersSettingsPage() {
             {/* Desktop layout */}
             <div className={`hidden md:grid ${DESKTOP_MEMBER_GRID} gap-3 items-center px-4 py-3`}>
               <div className="flex items-center gap-2.5">
-                <MemberAvatar member={member} />
+                <MemberAvatar member={member} avatarColorMap={avatarColorMap} />
                 <div>
                   <p className="text-sm font-medium text-foreground">{member.name}</p>
                   <p className="text-mini text-muted-foreground">{member.email}</p>

@@ -39,11 +39,16 @@ export default function AgendaPage() {
           <p className="text-sm text-muted-foreground mt-0.5">회의 ID: {meetingId} · 총 예상 시간: {totalMin}분</p>
         </div>
         <button
-          onClick={() => {
+          onClick={async () => {
             const wsid = getCurrentWorkspaceId()
             const numericId = Number(meetingId)
             if (Number.isFinite(numericId) && numericId > 0) {
-              startWorkspaceMeeting(wsid, numericId).catch(() => {})
+              try {
+                await startWorkspaceMeeting(wsid, numericId)
+              } catch (err) {
+                alert(err instanceof Error ? err.message : '회의 시작에 실패했습니다.')
+                return
+              }
             }
             navigate(`/live/${meetingId}`)
           }}

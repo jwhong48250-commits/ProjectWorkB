@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { AlertCircle, Camera, Check, Mic, Monitor, RefreshCw, Save, Volume2 } from 'lucide-react'
+import { AlertCircle, Camera, Check, Mic, RefreshCw, Save, Volume2 } from 'lucide-react'
 import { getMyDeviceSettings, updateMyDeviceSettings } from '../../api/auth'
 import {
   DEVICE_SETTINGS_STORAGE_KEY,
@@ -10,6 +10,11 @@ import {
 function getDeviceLabel(device: MediaDeviceInfo, index: number, fallback: string): string {
   return device.label || `${fallback} ${index + 1}`
 }
+
+const INPUT_LEVEL_NOISE_GATE = 0.006
+const INPUT_LEVEL_MAX_RMS = 0.14
+const INPUT_LEVEL_ATTACK = 0.35
+const INPUT_LEVEL_RELEASE = 0.12
 
 interface ToggleSwitchProps {
   checked: boolean
@@ -35,7 +40,6 @@ function ToggleSwitch({ checked, label, onChange }: ToggleSwitchProps) {
 
 export default function DeviceSettingsPage() {
   const stored = useRef(readStoredDeviceSettings())
-  const [isMainDevice, setIsMainDevice] = useState(stored.current.isMainDevice ?? true)
   const [selectedMicId, setSelectedMicId] = useState(stored.current.selectedMicId ?? '')
   const [selectedCameraId, setSelectedCameraId] = useState(stored.current.selectedCameraId ?? '')
   const [micEnabled, setMicEnabled] = useState(stored.current.micEnabled ?? true)
@@ -56,10 +60,6 @@ export default function DeviceSettingsPage() {
   const animationRef = useRef<number | null>(null)
   const savedTimerRef = useRef<number | null>(null)
   const inputLevelRef = useRef(0)
-
-  const currentDeviceName = typeof navigator === 'undefined'
-    ? '현재 브라우저'
-    : navigator.platform || '현재 브라우저'
 
   function stopCameraPreview() {
     cameraStreamRef.current?.getTracks().forEach((track) => track.stop())
@@ -85,7 +85,7 @@ export default function DeviceSettingsPage() {
 
   async function loadDevices() {
     if (!navigator.mediaDevices?.enumerateDevices) {
-      setPermissionError('이 브라우저에서는 장치 설정을 지원하지 않습니다.')
+      setPermissionError('이 브라우저에서는 장치 관리를 지원하지 않습니다.')
       setLoadingDevices(false)
       return
     }
@@ -124,7 +124,6 @@ export default function DeviceSettingsPage() {
     try {
       const settings = await getMyDeviceSettings()
       const nextSettings: StoredDeviceSettings = {
-        isMainDevice: settings.is_main_device,
         selectedMicId: settings.selected_mic_id ?? '',
         selectedCameraId: settings.selected_camera_id ?? '',
         micEnabled: settings.mic_enabled,
@@ -133,7 +132,6 @@ export default function DeviceSettingsPage() {
 
       stored.current = nextSettings
       localStorage.setItem(DEVICE_SETTINGS_STORAGE_KEY, JSON.stringify(nextSettings))
-      setIsMainDevice(nextSettings.isMainDevice)
       setSelectedMicId(nextSettings.selectedMicId)
       setSelectedCameraId(nextSettings.selectedCameraId)
       setMicEnabled(nextSettings.micEnabled)
@@ -198,9 +196,9 @@ export default function DeviceSettingsPage() {
       const audioContext = new AudioContextCtor()
       const analyser = audioContext.createAnalyser()
       const source = audioContext.createMediaStreamSource(stream)
-      const data = new Uint8Array(analyser.frequencyBinCount)
 
       analyser.fftSize = 256
+      const data = new Uint8Array(analyser.fftSize)
       source.connect(analyser)
       micStreamRef.current = stream
       audioContextRef.current = audioContext
@@ -215,8 +213,12 @@ export default function DeviceSettingsPage() {
         }
 
         const rms = Math.sqrt(sumSquares / data.length)
-        const targetLevel = Math.min(100, Math.round(rms * 260))
-        inputLevelRef.current = inputLevelRef.current * 0.75 + targetLevel * 0.25
+        const normalized = rms <= INPUT_LEVEL_NOISE_GATE
+          ? 0
+          : Math.min(1, (rms - INPUT_LEVEL_NOISE_GATE) / (INPUT_LEVEL_MAX_RMS - INPUT_LEVEL_NOISE_GATE))
+        const targetLevel = Math.round(normalized * 100)
+        const alpha = targetLevel > inputLevelRef.current ? INPUT_LEVEL_ATTACK : INPUT_LEVEL_RELEASE
+        inputLevelRef.current = inputLevelRef.current * (1 - alpha) + targetLevel * alpha
         setInputLevel(Math.round(inputLevelRef.current))
         animationRef.current = requestAnimationFrame(updateLevel)
       }
@@ -231,7 +233,6 @@ export default function DeviceSettingsPage() {
 
   async function saveSettings() {
     const nextSettings: StoredDeviceSettings = {
-      isMainDevice,
       selectedMicId,
       selectedCameraId,
       micEnabled,
@@ -246,14 +247,13 @@ export default function DeviceSettingsPage() {
 
     try {
       await updateMyDeviceSettings({
-        is_main_device: isMainDevice,
         selected_mic_id: selectedMicId || null,
         selected_camera_id: selectedCameraId || null,
         mic_enabled: micEnabled,
         camera_enabled: cameraEnabled,
       })
     } catch (err) {
-      setPermissionError(err instanceof Error ? err.message : '장비 설정을 서버에 저장하지 못했습니다.')
+      setPermissionError(err instanceof Error ? err.message : '장비 정보를 서버에 저장하지 못했습니다.')
       setSaving(false)
       return
     }
@@ -327,11 +327,11 @@ export default function DeviceSettingsPage() {
   }, [cameraEnabled, selectedCameraId])
 
   return (
-    <div className="max-w-xl mx-auto px-4 sm:px-6 py-6">
+    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-foreground mb-1">장비 설정</h1>
-          <p className="text-sm text-muted-foreground">AI 챗봇 및 STT를 실행할 장비와 입력 장치를 설정합니다.</p>
+          <h1 className="text-xl font-semibold text-foreground mb-1">장비 관리</h1>
+          <p className="text-sm text-muted-foreground">AI 챗봇 및 STT를 실행할 장비와 입력 장치를 관리합니다.</p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
           <button
@@ -361,35 +361,10 @@ export default function DeviceSettingsPage() {
       )}
 
       <div className="p-4 rounded-xl border border-border bg-card mb-5">
-        <div className="flex items-start gap-3 mb-3">
-          <Monitor size={20} className="text-accent mt-0.5 shrink-0" />
-          <div className="flex-1">
-            <h2 className="text-sm font-semibold text-foreground mb-1">AI 메인 장비 지정</h2>
-            <p className="text-mini text-muted-foreground">AI 챗봇 패널과 STT는 메인으로 지정된 장비 1대에서만 실행됩니다.</p>
-          </div>
-        </div>
-        <button
-          type="button"
-          aria-pressed={isMainDevice}
-          onClick={() => setIsMainDevice((value) => !value)}
-          className={`flex w-full items-center gap-2 rounded-lg border p-3 text-left transition-colors ${isMainDevice ? 'border-accent bg-accent-subtle' : 'border-border hover:border-accent/50'}`}
-        >
-          <span className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${isMainDevice ? 'border-accent bg-accent' : 'border-border'}`}>
-            {isMainDevice && <Check size={10} className="text-white" strokeWidth={3} />}
-          </span>
-          <span className="flex-1">
-            <span className="block text-sm font-medium text-foreground">이 장비를 메인으로 설정</span>
-            <span className="block text-mini text-muted-foreground">현재 기기: {currentDeviceName}</span>
-          </span>
-          {isMainDevice && <span className="rounded-full bg-accent px-2 py-0.5 text-micro font-medium text-accent-foreground">메인</span>}
-        </button>
-      </div>
-
-      <div className="p-4 rounded-xl border border-border bg-card mb-5">
         <div className="mb-3 flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
             <Mic size={16} className="text-accent" />
-            <h2 className="text-sm font-semibold text-foreground">마이크 설정</h2>
+            <h2 className="text-sm font-semibold text-foreground">마이크 관리</h2>
           </div>
           <ToggleSwitch
             checked={micEnabled}
@@ -451,7 +426,7 @@ export default function DeviceSettingsPage() {
         <div className="mb-3 flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
             <Camera size={16} className="text-accent" />
-            <h2 className="text-sm font-semibold text-foreground">웹캠 설정</h2>
+            <h2 className="text-sm font-semibold text-foreground">웹캠 관리</h2>
           </div>
           <ToggleSwitch
             checked={cameraEnabled}
@@ -480,7 +455,7 @@ export default function DeviceSettingsPage() {
             </div>
             <div className="aspect-video overflow-hidden rounded-lg border border-border bg-muted">
               {selectedCameraId ? (
-                <video ref={videoRef} autoPlay muted playsInline className="h-full w-full object-cover" />
+                <video ref={videoRef} autoPlay muted playsInline className="h-full w-full object-cover" style={{ transform: 'scaleX(-1)' }} />
               ) : (
                 <div className="flex h-full items-center justify-center text-sm text-muted-foreground">웹캠을 선택하세요.</div>
               )}

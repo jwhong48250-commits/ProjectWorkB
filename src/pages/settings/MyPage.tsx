@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Building2, Check, Image as ImageIcon, KeyRound, Save, Trash2, Upload, UserRound, X } from 'lucide-react'
+import { Check, Image as ImageIcon, KeyRound, Save, Trash2, Upload, UserRound, X } from 'lucide-react'
 import clsx from 'clsx'
 import { ApiError } from '../../api/client'
 import { updateMyProfile, uploadMyProfileImage, withdrawMyAccount, type Gender } from '../../api/auth'
 import {
   getWorkspaceMembers,
-  joinWorkspaceByInviteCode,
 } from '../../api/workspace'
 import { useAuth } from '../../context/AuthContext'
 import BirthDateSelect from '../../components/auth/BirthDateSelect'
@@ -15,8 +14,6 @@ import { useFontScale, type FontScale } from '../../context/FontScaleContext'
 import { getProfileImage, setProfileImage } from '../../utils/profileImage'
 import {
   getCurrentWorkspaceId,
-  setCurrentWorkspaceId,
-  setCurrentWorkspaceRole,
   WORKSPACE_CHANGED_EVENT,
 } from '../../utils/workspace'
 
@@ -55,10 +52,7 @@ export default function MyPage() {
   const [draftAccentPreset, setDraftAccentPreset] = useState<AccentPreset>(accentPreset)
   const [draftAccentAsMain, setDraftAccentAsMain] = useState(accentAsMain)
   const [saving, setSaving] = useState(false)
-  const [inviteCode, setInviteCode] = useState('')
-  const [joiningWorkspace, setJoiningWorkspace] = useState(false)
   const [departmentName, setDepartmentName] = useState('부서 없음')
-  const [workspaceJoinMessage, setWorkspaceJoinMessage] = useState('')
   const [withdrawing, setWithdrawing] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
@@ -223,7 +217,7 @@ export default function MyPage() {
       setDraftBirthDate(savedUser.birth_date ?? '')
       setDraftPhoneNumber(savedUser.phone_number ?? '')
       setDraftGender(savedUser.gender ?? '')
-      setMessage('마이페이지 설정이 저장되었습니다.')
+      setMessage('마이페이지 정보가 저장되었습니다.')
     } catch (err) {
       setError(
         err instanceof ApiError
@@ -234,37 +228,6 @@ export default function MyPage() {
       )
     } finally {
       setSaving(false)
-    }
-  }
-
-  async function handleJoinWorkspace(event: FormEvent) {
-    event.preventDefault()
-    setError('')
-    setWorkspaceJoinMessage('')
-
-    const normalizedCode = inviteCode.trim().toUpperCase()
-    if (normalizedCode.length < 6) {
-      setError('초대코드를 확인해주세요.')
-      return
-    }
-
-    setJoiningWorkspace(true)
-    try {
-      const response = await joinWorkspaceByInviteCode(normalizedCode)
-      setCurrentWorkspaceRole(response.role)
-      setCurrentWorkspaceId(response.workspace_id)
-      setInviteCode('')
-      setWorkspaceJoinMessage(response.message || `${response.workspace_name} 워크스페이스에 참여했습니다.`)
-    } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? err.message
-          : err instanceof Error
-            ? err.message
-            : '워크스페이스 참여에 실패했습니다.',
-      )
-    } finally {
-      setJoiningWorkspace(false)
     }
   }
 
@@ -299,7 +262,7 @@ export default function MyPage() {
     <div className="mx-auto max-w-2xl px-4 py-6 sm:px-6">
       <div className="mb-6">
         <h1 className="mb-1 text-xl font-semibold text-foreground">마이페이지</h1>
-        <p className="text-sm text-muted-foreground">내 프로필과 개인 화면 설정을 관리합니다.</p>
+        <p className="text-sm text-muted-foreground">내 프로필과 개인 화면 구성을 관리합니다.</p>
       </div>
 
       {error && (
@@ -447,7 +410,7 @@ export default function MyPage() {
             <KeyRound size={20} className="mt-0.5 shrink-0 text-accent" />
             <div>
               <h2 className="text-sm font-semibold text-foreground">계정 보안</h2>
-              <p className="text-mini text-muted-foreground">비밀번호 변경은 설정 메뉴의 전용 화면에서 처리합니다.</p>
+              <p className="text-mini text-muted-foreground">비밀번호 변경은 관리 메뉴의 전용 화면에서 처리합니다.</p>
             </div>
           </div>
           <Link
@@ -460,7 +423,7 @@ export default function MyPage() {
         </div>
 
         <div className="rounded-xl border border-border bg-card p-4">
-          <h2 className="mb-1 text-sm font-semibold text-foreground">개인 화면 설정</h2>
+          <h2 className="mb-1 text-sm font-semibold text-foreground">개인 화면 관리</h2>
           <p className="mb-4 text-mini text-muted-foreground">선택 즉시 미리보기로 반영되며, 저장 버튼을 눌러야 유지됩니다.</p>
 
           <div className="mb-5">
@@ -582,48 +545,6 @@ export default function MyPage() {
             {saving ? '저장 중...' : '마이페이지 저장'}
           </button>
         </div>
-      </form>
-
-      <form onSubmit={handleJoinWorkspace} className="mt-5 rounded-xl border border-border bg-card p-4">
-        <div className="mb-4 flex items-start gap-3">
-          <Building2 size={20} className="mt-0.5 shrink-0 text-accent" />
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">워크스페이스 참여</h2>
-            <p className="text-mini text-muted-foreground">초대코드를 입력하면 해당 워크스페이스가 사이드바 목록에 추가됩니다.</p>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <div className="min-w-0 flex-1">
-            <label className="sr-only" htmlFor="workspace-invite-code">초대코드</label>
-            <input
-              id="workspace-invite-code"
-              type="text"
-              value={inviteCode}
-              onChange={(event) => {
-                setInviteCode(event.target.value.toUpperCase())
-                setWorkspaceJoinMessage('')
-              }}
-              placeholder="초대코드 입력"
-              className="h-10 w-full rounded-lg border border-border bg-background px-3 font-mono text-sm tracking-widest outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={joiningWorkspace}
-            className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-accent px-4 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <Building2 size={15} />
-            {joiningWorkspace ? '참여 중...' : '워크스페이스 참여'}
-          </button>
-        </div>
-
-        {workspaceJoinMessage && (
-          <p className="mt-3 inline-flex items-center gap-1.5 text-sm text-accent">
-            <Check size={14} />
-            {workspaceJoinMessage}
-          </p>
-        )}
       </form>
 
       <div className="mt-6 rounded-xl border border-red-200/80 bg-red-50/70 p-4 dark:border-red-900/45 dark:bg-red-950/10">

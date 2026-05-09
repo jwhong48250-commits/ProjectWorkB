@@ -1,5 +1,5 @@
 import { useParams, useNavigate, useLocation, Link } from "react-router-dom";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Share2,
   AlertCircle,
@@ -33,26 +33,8 @@ import { getCurrentWorkspaceId } from "../../api/client";
 import { fetchWorkspaceMeetingDetail } from "../../api/meetings";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-
-/** speaker_label → 고정 색상 매핑 (같은 화자는 항상 같은 색) */
-const SPEAKER_COLORS = [
-  "#6b78f6",
-  "#22c55e",
-  "#f97316",
-  "#ec4899",
-  "#14b8a6",
-  "#a855f7",
-  "#eab308",
-  "#ef4444",
-];
-
-function getSpeakerColor(label: string): string {
-  let hash = 0;
-  for (let i = 0; i < label.length; i++) {
-    hash = (hash * 31 + label.charCodeAt(i)) & 0xffffffff;
-  }
-  return SPEAKER_COLORS[Math.abs(hash) % SPEAKER_COLORS.length];
-}
+import { createLabelColorMap, pickLabelColor } from "../../utils/avatarColor";
+import { useProfileImage } from "../../utils/profileImage";
 
 /** start(초) → 분:초 포맷 */
 function formatTime(seconds: number): string {
@@ -62,6 +44,38 @@ function formatTime(seconds: number): string {
 }
 
 const INITIAL_VISIBLE_UTTERANCES = 5;
+
+function SpeakerAvatar({
+  userId,
+  label,
+  color,
+}: {
+  userId: number | null;
+  label: string;
+  color: string;
+}) {
+  const profileImage = useProfileImage(userId ?? undefined);
+  const initial = label.trim()[0] ?? "?";
+
+  if (profileImage) {
+    return (
+      <img
+        src={profileImage}
+        alt={label}
+        className="w-7 h-7 rounded-full object-cover shrink-0 mt-0.5"
+      />
+    );
+  }
+
+  return (
+    <div
+      className="w-7 h-7 rounded-full flex items-center justify-center text-white text-mini font-bold shrink-0 mt-0.5"
+      style={{ backgroundColor: color }}
+    >
+      {initial}
+    </div>
+  );
+}
 
 export default function NotesPage() {
   const { meetingId } = useParams();
@@ -234,6 +248,25 @@ export default function NotesPage() {
         .then(setMembers)
         .catch(() => {});
   }, []);
+  const speakerColorMap = useMemo(
+    () =>
+      createLabelColorMap([
+        ...utterances.map((u) => u.speaker_label),
+        ...members.map((m) => m.name),
+      ]),
+    [utterances, members],
+  );
+  const memberById = useMemo(
+    () => new Map(members.map((member) => [member.user_id, member])),
+    [members],
+  );
+  const memberByName = useMemo(
+    () =>
+      new Map(
+        members.map((member) => [member.name.trim().toLowerCase(), member]),
+      ),
+    [members],
+  );
 
   // 화자 수정 모달 상태
   interface SpeakerModal {
@@ -466,12 +499,11 @@ export default function NotesPage() {
                               : "hover:bg-muted/60 border border-transparent",
                           ].join(" ")}
                         >
-                          <span
-                            className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
-                            style={{ backgroundColor: getSpeakerColor(m.name) }}
-                          >
-                            {m.name[0]}
-                          </span>
+                          <SpeakerAvatar
+                            userId={m.user_id}
+                            label={m.name}
+                            color={pickLabelColor(m.name, speakerColorMap)}
+                          />
                           <span className="flex-1 font-medium text-foreground">
                             {m.name}
                           </span>
@@ -657,8 +689,12 @@ export default function NotesPage() {
           {!utterancesLoading && !utterancesError && utterances.length > 0 && (
             <div className="flex flex-col gap-2.5">
               {visibleUtterances.map((u) => {
-                const color = getSpeakerColor(u.speaker_label);
-                const initial = u.speaker_label.trim()[0] ?? "?";
+                const color = pickLabelColor(u.speaker_label, speakerColorMap);
+                const normalizedLabel = u.speaker_label.trim().toLowerCase();
+                const matchedMember =
+                  (u.speaker_id !== null ? memberById.get(u.speaker_id) : undefined) ??
+                  memberByName.get(normalizedLabel);
+                const speakerUserId = matchedMember?.user_id ?? null;
                 const isPlaying = playingSeq === u.seq;
                 const isActive =
                   fullPlaying &&
@@ -672,12 +708,11 @@ export default function NotesPage() {
                       isActive ? "bg-accent/10 ring-1 ring-accent/20" : "",
                     ].join(" ")}
                   >
-                    <div
-                      className="w-7 h-7 rounded-full flex items-center justify-center text-white text-mini font-bold shrink-0 mt-0.5"
-                      style={{ backgroundColor: color }}
-                    >
-                      {initial}
-                    </div>
+                    <SpeakerAvatar
+                      userId={speakerUserId}
+                      label={u.speaker_label}
+                      color={color}
+                    />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                         {/* 화자 이름 — 수정 모드일 때만 클릭 가능 */}

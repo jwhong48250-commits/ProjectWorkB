@@ -6,22 +6,11 @@ import type { ScreenAnalysis, PptSlideResult } from '../../api/vision'
 import { analyzeDocument } from '../../api/chatbot'
 import type { DocumentAnalysis } from '../../api/chatbot'
 
-const DEVICE_STORAGE_KEY = 'workb-device-settings'
-
 // 화면 캡처 결과와 PPT 슬라이드 결과를 통합 리스트로 표시
 type AnalysisItem =
     | { kind: 'screen'; data: ScreenAnalysis }
     | { kind: 'slide'; data: PptSlideResult & { timestamp: string } }
     | { kind: 'document'; data: DocumentAnalysis}
-
-// localStorage에서 메인 장비 여부 읽기
-function getIsMainDevice(): boolean {
-    try {
-        return JSON.parse(localStorage.getItem(DEVICE_STORAGE_KEY) ?? '{}').isMainDevice ?? false
-    } catch {
-        return false
-    }
-}
 
 interface Props {
   meetingId: number
@@ -31,7 +20,6 @@ interface Props {
 
 export default function LiveScreenPage({ meetingId, compact = false }: Props) {
     const workspaceId = getCurrentWorkspaceId()
-    const isMainDevice = getIsMainDevice()
 
     const [items, setItems] = useState<AnalysisItem[]>([])
     const [isSharing, setIsSharing] = useState(false)
@@ -57,7 +45,6 @@ export default function LiveScreenPage({ meetingId, compact = false }: Props) {
     // 언마운트 시 스트림 정리
     useEffect(() => () => stopSharing(), [])
 
-    // 화면 공유 시작 — 메인 장비에서만 호출됨
     async function startSharing() {
         setError(null)
         try {
@@ -182,31 +169,21 @@ flex-col items-center justify-center mb-3 overflow-hidden relative shrink-0`}>
                   muted                                                                                            
                   playsInline                                                                                      
               />                                                                                                   
-              {!isSharing && (isMainDevice ? (                                                                   
+              {!isSharing && (
                   <>
                       <Monitor size={iconSize} className="text-muted-foreground/30" />
-                      <p className={`${compact ? 'text-mini' : 'text-sm'} text-muted-foreground`}>                 
-                          화면 공유 미리보기                                                                       
+                      <p className={`${compact ? 'text-mini' : 'text-sm'} text-muted-foreground`}>
+                          화면 공유 미리보기
                       </p>
-                      <button                                                                                                      
-                        onClick={startSharing}                                                                                 
-                        className={`mt-1 flex items-center gap-1 ${btnSize} rounded-lg bg-accent text-accent-foreground font-medium hover:bg-accent/90 transition-colors`}                                                                   
-                    >                                                                                                            
-                        <Monitor size={compact ? 12 : 15} />                                                                     
-                        화면 공유 시작                                                                                         
-                      </button>                                                                         
-                  </>                                                                                              
-              ) : (                                                                                              
-                  <>
-                      <Monitor size={iconSize} className="text-muted-foreground/20" />
-                      <p className={`${compact ? 'text-mini' : 'text-sm'} text-muted-foreground mt-2`}>            
-                          메인 장비에서만 화면 공유가 가능합니다.
-                      </p>                                                                                         
-                      <p className="text-micro text-muted-foreground mt-1">                                      
-                          장비 설정에서 이 기기를 메인으로 지정하세요.                                             
-                      </p>                                                                                         
-                  </>                                                                                              
-              ))}                                                                                                  
+                      <button
+                        onClick={startSharing}
+                        className={`mt-1 flex items-center gap-1 ${btnSize} rounded-lg bg-accent text-accent-foreground font-medium hover:bg-accent/90 transition-colors`}
+                    >
+                        <Monitor size={compact ? 12 : 15} />
+                        화면 공유 시작
+                      </button>
+                  </>
+              )}
               {isAnalyzing && (                                                                                  
                   <div className="absolute inset-0 bg-black/30 flex items-center justify-center">                  
                       <span className="text-white text-sm font-medium">분석 중...</span>

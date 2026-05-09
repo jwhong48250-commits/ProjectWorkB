@@ -6,6 +6,7 @@ import {
   type SpeakerProfileItem,
 } from "../../api/speakerProfiles";
 import { useAuth } from "../../context/AuthContext";
+import { createAvatarColorMap, pickAvatarColor } from "../../utils/avatarColor";
 import { useProfileImage } from "../../utils/profileImage";
 
 const TARGET_SAMPLE_RATE = 16000;
@@ -90,19 +91,13 @@ function getInitial(name: string): string {
   return name.trim().charAt(0).toUpperCase() || "?";
 }
 
-function getAvatarColor(userId: number): string {
-  const colors = [
-    "#6b78f6",
-    "#22c55e",
-    "#f97316",
-    "#ec4899",
-    "#eab308",
-    "#14b8a6",
-  ];
-  return colors[userId % colors.length];
-}
-
-function SpeakerAvatar({ profile }: { profile: SpeakerProfileItem }) {
+function SpeakerAvatar({
+  profile,
+  avatarColorMap,
+}: {
+  profile: SpeakerProfileItem;
+  avatarColorMap: Map<number, string>;
+}) {
   const profileImage = useProfileImage(profile.user_id);
 
   if (profileImage) {
@@ -119,7 +114,7 @@ function SpeakerAvatar({ profile }: { profile: SpeakerProfileItem }) {
     <div
       className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
       style={{
-        backgroundColor: getAvatarColor(profile.user_id),
+        backgroundColor: pickAvatarColor(profile.user_id, avatarColorMap),
       }}
     >
       {getInitial(profile.name)}
@@ -133,6 +128,9 @@ export default function VoiceSettingsPage() {
   const [recordingUserId, setRecordingUserId] = useState<number | null>(null);
   const [recordingModal, setRecordingModal] =
     useState<RecordingModalState | null>(null);
+  const avatarColorMap = createAvatarColorMap(
+    profiles.map((profile) => profile.user_id),
+  );
   const [loading, setLoading] = useState(true);
   const [savingUserId, setSavingUserId] = useState<number | null>(null);
   const [error, setError] = useState("");
@@ -312,7 +310,7 @@ export default function VoiceSettingsPage() {
       setRecordingUserId(null);
       setRecordingModal(null);
       setError(
-        "마이크 접근 권한이 필요합니다. 브라우저 설정에서 허용해주세요.",
+        "마이크 접근 권한이 필요합니다. 브라우저 권한 메뉴에서 허용해주세요.",
       );
     } finally {
       if (startingRequestIdRef.current === requestId) {
@@ -439,7 +437,10 @@ export default function VoiceSettingsPage() {
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                   <div className="flex min-w-0 flex-1 items-center gap-3">
-                    <SpeakerAvatar profile={profile} />
+                    <SpeakerAvatar
+                      profile={profile}
+                      avatarColorMap={avatarColorMap}
+                    />
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-foreground">
                         {profile.name}
