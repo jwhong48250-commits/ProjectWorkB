@@ -21,6 +21,7 @@ export interface StoredUser {
   age?: number | null;
   phone_number?: string | null;
   gender?: Gender | null;
+  profile_image_url?: string | null;
 }
 
 interface ApiRequestOptions extends RequestInit {
@@ -306,6 +307,7 @@ export function syncStoredUserFromToken(
   const hasBirthDateClaim = Object.prototype.hasOwnProperty.call(payload ?? {}, "birth_date");
   const hasPhoneNumberClaim = Object.prototype.hasOwnProperty.call(payload ?? {}, "phone_number");
   const hasGenderClaim = Object.prototype.hasOwnProperty.call(payload ?? {}, "gender");
+  const hasProfileImageClaim = Object.prototype.hasOwnProperty.call(payload ?? {}, "profile_image_url");
   const birthDate =
     payload?.birth_date === null
       ? null
@@ -316,6 +318,10 @@ export function syncStoredUserFromToken(
       ? null
       : readStringClaim(payload?.phone_number) ?? fallback.phone_number;
   const gender = isGender(payload?.gender) ? payload.gender : fallback.gender;
+  const profileImageUrl =
+    payload?.profile_image_url === null
+      ? null
+      : readStringClaim(payload?.profile_image_url) ?? fallback.profile_image_url;
 
   if (!Number.isFinite(id) || !role) return getStoredUser();
 
@@ -331,6 +337,9 @@ export function syncStoredUserFromToken(
     age: age ?? previous?.age ?? null,
     phone_number: hasPhoneNumberClaim ? phoneNumber ?? null : phoneNumber ?? previous?.phone_number ?? null,
     gender: hasGenderClaim ? gender ?? null : gender ?? previous?.gender ?? null,
+    profile_image_url: hasProfileImageClaim
+      ? profileImageUrl ?? null
+      : profileImageUrl ?? previous?.profile_image_url ?? null,
   };
 
   setStoredUser(user);

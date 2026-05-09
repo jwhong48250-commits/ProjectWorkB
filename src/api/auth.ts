@@ -62,6 +62,7 @@ export interface UserResponse {
   age: number | null
   phone_number: string | null
   gender: Gender | null
+  profile_image_url: string | null
 }
 
 export interface UserProfileResponse extends UserResponse {

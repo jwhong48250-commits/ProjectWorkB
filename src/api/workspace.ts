@@ -1,6 +1,7 @@
 import { apiRequest } from './client'
 import { getApiOrigin } from './baseUrl'
 import { isUsableWorkspaceLogoUrl } from '../utils/workspaceLogo'
+import { setProfileImage } from '../utils/profileImage'
 
 export type UserRole = 'admin' | 'member' | 'viewer'
 
@@ -32,6 +33,7 @@ export interface WorkspaceMember {
   birth_date: string | null
   age: number | null
   gender: 'male' | 'female' | null
+  profile_image_url: string | null
 }
 
 export interface Department {
@@ -154,7 +156,18 @@ export async function getWorkspaceMembers(
   const response = await apiRequest<{ members: WorkspaceMember[] }>(
     `/workspaces/${workspaceId}/members${search}`,
   )
-  return response.members
+  return response.members.map((member) => {
+    const profileImageUrl = member.profile_image_url
+      ? (member.profile_image_url.startsWith('http')
+          ? member.profile_image_url
+          : `${getApiOrigin()}${member.profile_image_url}`)
+      : null
+    setProfileImage(member.user_id, profileImageUrl ?? '')
+    return {
+      ...member,
+      profile_image_url: profileImageUrl,
+    }
+  })
 }
 
 export async function updateMemberRole(

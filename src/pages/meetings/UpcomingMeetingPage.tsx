@@ -5,6 +5,7 @@ import { formatTime } from '../../utils/format'
 import { persistMeetingSnapshot, readMeetingSnapshotForRoute } from '../../utils/meetingRoutes'
 import type { Meeting } from '../../types/meeting'
 import Tooltip from '../../components/ui/Tooltip'
+import { Avatar } from '../../components/ui/Avatar'
 import {
   getCurrentWorkspaceId,
   getCurrentWorkspaceRole,
@@ -208,13 +209,7 @@ export default function UpcomingMeetingPage() {
                   key={p.id}
                   className="flex items-center gap-1 px-2 py-0.5 rounded-full text-mini bg-muted text-foreground"
                 >
-                  <span
-                    className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-white"
-                    style={{ backgroundColor: p.color, fontSize: '8px', fontWeight: 700 }}
-                    aria-hidden="true"
-                  >
-                    {p.avatarInitials[0]}
-                  </span>
+                  <Avatar participant={p} size="sm" className="w-3.5 h-3.5 text-[8px]" />
                   {p.name}
                 </span>
               ))}
