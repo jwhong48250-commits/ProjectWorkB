@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Search, User, ChevronDown, Clock, X } from "lucide-react";
+import { Search, User, ChevronDown, Clock, X, ChevronLeft, ChevronRight } from "lucide-react";
 import clsx from "clsx";
 import Badge from "../components/ui/Badge";
 import { formatDateFull } from "../utils/format";
@@ -10,6 +10,7 @@ import type { Meeting, Participant } from "../types/meeting";
 import { apiRequest } from "../api/client";
 import { fetchWorkspaceMembers } from "../api/workspaceMembers";
 import DatePicker from "../components/ui/DatePicker";
+import { createAvatarColorMap, pickAvatarColor } from "../utils/avatarColor";
 
 type BackendStatus = "scheduled" | "in_progress" | "done";
 type UiStatus = "upcoming" | "inprogress" | "completed";
@@ -46,12 +47,13 @@ function pickStartAt(m: MeetingHistoryItem): string {
     return m.started_at ?? m.scheduled_at ?? m.ended_at ?? new Date().toISOString();
 }
 
-const HISTORY_AVATAR_COLORS = ["#6b78f6", "#22c55e", "#f97316", "#ec4899", "#eab308", "#14b8a6", "#8b5cf6", "#64748b"];
-
-function historyParticipantsToAvatars(rows: MeetingHistoryParticipant[] | undefined): Participant[] {
+function historyParticipantsToAvatars(
+    rows: MeetingHistoryParticipant[] | undefined,
+    avatarColorMap: Map<number, string>,
+): Participant[] {
     if (!rows?.length) return [];
     return rows.map((p) => {
-        const color = HISTORY_AVATAR_COLORS[Math.abs(p.user_id) % HISTORY_AVATAR_COLORS.length];
+        const color = pickAvatarColor(p.user_id, avatarColorMap);
         const name = p.name.trim();
         const initials = name.length >= 2 ? name.slice(0, 2) : name.length === 1 ? name : "?";
         return {
@@ -70,14 +72,17 @@ function isYmd(s: string): boolean {
     return !Number.isNaN(t);
 }
 
-function historyItemToMeeting(m: MeetingHistoryItem): Meeting {
+function historyItemToMeeting(
+    m: MeetingHistoryItem,
+    avatarColorMap: Map<number, string>,
+): Meeting {
     return {
         id: String(m.id),
         title: m.title,
         status: mapStatus(m.status) as Meeting["status"],
         startAt: pickStartAt(m),
         endAt: m.ended_at ?? undefined,
-        participants: historyParticipantsToAvatars(m.participants),
+        participants: historyParticipantsToAvatars(m.participants, avatarColorMap),
         agenda: [],
         summary: m.summary ?? undefined,
         actionItemCount: 0,
@@ -85,6 +90,8 @@ function historyItemToMeeting(m: MeetingHistoryItem): Meeting {
         tags: [],
     };
 }
+
+const HISTORY_PAGE_SIZE = 10;
 
 function parseSummaryPreview(raw: string | null | undefined): string {
     if (!raw) return "";
@@ -112,6 +119,7 @@ export default function HistoryPage() {
     const [membersLoading, setMembersLoading] = useState(false);
     const [meetingsHistory, setMeetingsHistory] = useState<MeetingHistoryItem[]>([]);
     const [total, setTotal] = useState(0);
+    const [page, setPage] = useState(1);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [workspaceId, setWorkspaceId] = useState(() => getCurrentWorkspaceId());
@@ -119,10 +127,12 @@ export default function HistoryPage() {
     // Keep state in sync when user lands via TopBar (/history?keyword=...&date=...)
     useEffect(() => {
         setSearchKeyword(initialKeyword);
+        setPage(1);
     }, [initialKeyword]);
 
     useEffect(() => {
         setFilterDate(initialDate);
+        setPage(1);
     }, [initialDate]);
 
     useEffect(() => {
@@ -154,6 +164,10 @@ export default function HistoryPage() {
         };
     }, [workspaceId]);
 
+    const avatarColorMap = createAvatarColorMap(
+        meetingsHistory.flatMap((meeting) => (meeting.participants ?? []).map((p) => p.user_id)),
+    );
+
     // Debounced fetch
     useEffect(() => {
         const keyword = searchKeyword.trim();
@@ -164,8 +178,8 @@ export default function HistoryPage() {
             const pid = participantFilter ? Number(participantFilter) : NaN;
             if (Number.isFinite(pid) && pid > 0) qs.set("participant_user_id", String(pid));
             if (filterDate && isYmd(filterDate)) qs.set("date", filterDate);
-            qs.set("page", "1");
-            qs.set("size", "20");
+            qs.set("page", String(page));
+            qs.set("size", String(HISTORY_PAGE_SIZE));
 
             setLoading(true);
             setError(null);
@@ -190,12 +204,16 @@ export default function HistoryPage() {
             clearTimeout(handle);
             controller.abort();
         };
-    }, [searchKeyword, workspaceId, participantFilter, filterDate]);
+    }, [searchKeyword, workspaceId, participantFilter, filterDate, page]);
 
-    const filtered = useMemo(() => meetingsHistory, [meetingsHistory]);
+    useEffect(() => {
+        setPage(1);
+    }, [workspaceId]);
+
+    const totalPages = Math.max(1, Math.ceil(total / HISTORY_PAGE_SIZE));
 
     return (
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-6">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
             {/* Page heading */}
             <div className="mb-5">
                 <h1 className="text-xl font-semibold text-foreground">회의 히스토리</h1>
@@ -216,6 +234,7 @@ export default function HistoryPage() {
                         onChange={(e) => {
                             const next = e.target.value;
                             setSearchKeyword(next);
+                            setPage(1);
                             const params = new URLSearchParams(searchParams);
                             if (next.trim()) params.set("keyword", next);
                             else params.delete("keyword");
@@ -229,7 +248,10 @@ export default function HistoryPage() {
                 <div className="relative">
                     <select
                         value={participantFilter ?? ""}
-                        onChange={(e) => setParticipantFilter(e.target.value || null)}
+                        onChange={(e) => {
+                            setParticipantFilter(e.target.value || null);
+                            setPage(1);
+                        }}
                         className={clsx(
                             "appearance-none h-8 pl-8 pr-7 rounded border text-sm bg-card cursor-pointer",
                             "border-border hover:border-muted-foreground transition-colors outline-none",
@@ -258,6 +280,7 @@ export default function HistoryPage() {
                         value={filterDate}
                         onChange={(next) => {
                             setFilterDate(next);
+                            setPage(1);
                             const params = new URLSearchParams(searchParams);
                             if (next && isYmd(next)) params.set("date", next);
                             else params.delete("date");
@@ -271,6 +294,7 @@ export default function HistoryPage() {
                             type="button"
                             onClick={() => {
                                 setFilterDate("");
+                                setPage(1);
                                 const params = new URLSearchParams(searchParams);
                                 params.delete("date");
                                 setSearchParams(params, { replace: true });
@@ -291,7 +315,7 @@ export default function HistoryPage() {
                 </div>
             ) : null}
 
-            {filtered.length === 0 && !loading ? (
+            {meetingsHistory.length === 0 && !loading ? (
                 <div className="flex flex-col items-center justify-center py-20 gap-2">
                     <Search size={32} className="text-muted-foreground/30" />
                     <p className="text-sm text-muted-foreground">검색 결과가 없습니다.</p>
@@ -306,12 +330,12 @@ export default function HistoryPage() {
                         </span>
                     </div>
 
-                    {filtered.map((meeting) => (
+                    {meetingsHistory.map((meeting) => (
                         <MeetingRow
                             key={meeting.id}
                             meeting={meeting}
                             onClick={() => {
-                                persistMeetingSnapshot(historyItemToMeeting(meeting));
+                                persistMeetingSnapshot(historyItemToMeeting(meeting, avatarColorMap));
                                 const path =
                                     meeting.status === "scheduled"
                                         ? `/meetings/${meeting.id}/upcoming`
@@ -322,6 +346,30 @@ export default function HistoryPage() {
                     ))}
                 </div>
             )}
+
+            {meetingsHistory.length > 0 && totalPages > 1 ? (
+                <div className="flex items-center justify-center gap-3 mt-6">
+                    <button
+                        type="button"
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        disabled={page === 1 || loading}
+                        className="flex items-center gap-1 h-8 px-3 rounded-lg border border-border text-sm text-muted-foreground hover:bg-muted/50 transition-colors disabled:opacity-40"
+                    >
+                        <ChevronLeft size={14} /> 이전
+                    </button>
+                    <span className="text-sm text-muted-foreground">
+                        {page} / {totalPages}
+                    </span>
+                    <button
+                        type="button"
+                        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                        disabled={page === totalPages || loading}
+                        className="flex items-center gap-1 h-8 px-3 rounded-lg border border-border text-sm text-muted-foreground hover:bg-muted/50 transition-colors disabled:opacity-40"
+                    >
+                        다음 <ChevronRight size={14} />
+                    </button>
+                </div>
+            ) : null}
 
             {/* Chatbot placeholder */}
             {/* <div className="mt-6 mb-6 p-4 rounded-lg border border-dashed border-border bg-muted/20 text-center">

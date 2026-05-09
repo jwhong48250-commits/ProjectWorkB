@@ -545,13 +545,15 @@ export default function ChatFAB() {
                     <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
                         {/* Header */}
                         <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border bg-accent/5">
-                            <img
-                                src="/brand/chatbot.png"
-                                alt="AI 도우미"
-                                width={28}
-                                height={28}
-                                className="rounded-md object-contain"
-                            />
+                            <div className="w-7 h-7 rounded-md bg-accent flex items-center justify-center shrink-0">
+                                <img
+                                    src="/brand/chatbot_ts.png"
+                                    alt="AI 도우미"
+                                    width={24}
+                                    height={24}
+                                    className="object-contain"
+                                />
+                            </div>
                             <div className="flex-1 min-w-0">
                                 <p className="text-sm font-semibold text-foreground">Workb 도우미</p>
                                 <p className="text-mini text-muted-foreground">AI 어시스턴트 · 항상 대기 중</p>
@@ -621,13 +623,15 @@ export default function ChatFAB() {
                                 >
                                     {msg.role === "assistant" && (
                                         <div className="shrink-0">
-                                            <img
-                                                src="/brand/chatbot.png"
-                                                alt="AI 도우미"
-                                                width={22}
-                                                height={22}
-                                                className="rounded-md object-contain"
-                                            />
+                                            <div className="w-[22px] h-[22px] rounded-md bg-accent flex items-center justify-center">
+                                                <img
+                                                    src="/brand/chatbot_ts.png"
+                                                    alt="AI 도우미"
+                                                    width={18}
+                                                    height={18}
+                                                    className="object-contain"
+                                                />
+                                            </div>
                                         </div>
                                     )}
                                     <div
@@ -717,13 +721,15 @@ export default function ChatFAB() {
                             {isLoading && (
                                 <div className="flex gap-2 items-end">
                                     <div className="shrink-0">
-                                        <img
-                                            src="/brand/chatbot.png"
-                                            alt="AI 도우미"
-                                            width={22}
-                                            height={22}
-                                            className="rounded-md object-contain"
-                                        />
+                                        <div className="w-[22px] h-[22px] rounded-md bg-accent flex items-center justify-center">
+                                            <img
+                                                src="/brand/chatbot_ts.png"
+                                                alt="AI 도우미"
+                                                width={18}
+                                                height={18}
+                                                className="object-contain"
+                                            />
+                                        </div>
                                     </div>
                                     <div className="bg-muted text-muted-foreground px-3 py-2 rounded-2xl rounded-bl-sm text-sm flex items-center gap-1.5">
                                         <Loader2 size={13} className="animate-spin" />

@@ -393,7 +393,7 @@ export default function IntegrationsSettingsPage() {
       {jiraStep === 'mapping' && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-card rounded-xl border border-border p-6 w-full max-w-md mx-4">
-            <h2 className="text-base font-semibold text-foreground mb-1">상태 매핑 설정</h2>
+            <h2 className="text-base font-semibold text-foreground mb-1">상태 매핑 관리</h2>
             <p className="text-mini text-muted-foreground mb-1">JIRA 상태를 WorkB 상태로 매핑하세요.</p>
             <p className="text-micro text-muted-foreground mb-4">프로젝트: <span className="font-medium text-accent">{jiraSelectedProject}</span></p>
             <div className="flex flex-col gap-2 mb-4 max-h-56 overflow-y-auto">
@@ -629,7 +629,7 @@ function IntegrationCard({
                 onClick={onJiraSetup}
                 className="text-mini text-accent hover:underline transition-colors"
               >
-                설정 변경
+                매핑 관리
               </button>
               <span className="text-muted-foreground text-mini">·</span>
               <button

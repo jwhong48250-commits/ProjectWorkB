@@ -3,16 +3,11 @@ import { Link } from 'react-router-dom'
 import { Users } from 'lucide-react'
 import { getWorkspaceMembers, type UserRole, type WorkspaceMember } from '../../api/workspace'
 import { useProfileImage } from '../../utils/profileImage'
+import { createAvatarColorMap, pickAvatarColor } from '../../utils/avatarColor'
 import {
   getCurrentWorkspaceRole,
   WORKSPACE_ROLE_CHANGED_EVENT,
 } from '../../utils/workspace'
-
-const AVATAR_COLORS = ['#6b78f6', '#22c55e', '#f97316', '#ec4899', '#eab308', '#14b8a6', '#8b5cf6']
-
-function getAvatarColor(userId: number): string {
-  return AVATAR_COLORS[Math.abs(userId) % AVATAR_COLORS.length]
-}
 
 function getInitial(name: string): string {
   return name.trim().charAt(0) || '?'
@@ -40,7 +35,13 @@ function sortMembers(list: WorkspaceMember[]): WorkspaceMember[] {
   })
 }
 
-function MemberAvatar({ member }: { member: WorkspaceMember }) {
+function MemberAvatar({
+  member,
+  avatarColorMap,
+}: {
+  member: WorkspaceMember
+  avatarColorMap: Map<number, string>
+}) {
   const profileImage = useProfileImage(member.user_id)
 
   if (profileImage) {
@@ -56,7 +57,7 @@ function MemberAvatar({ member }: { member: WorkspaceMember }) {
   return (
     <div
       className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
-      style={{ backgroundColor: getAvatarColor(member.user_id) }}
+      style={{ backgroundColor: pickAvatarColor(member.user_id, avatarColorMap) }}
       aria-hidden
     >
       {getInitial(member.name)}
@@ -106,6 +107,10 @@ export default function WorkspaceMembersAside({ workspaceId }: { workspaceId: nu
   }, [workspaceId])
 
   const sorted = useMemo(() => sortMembers(members), [members])
+  const avatarColorMap = useMemo(
+    () => createAvatarColorMap(sorted.map((m) => m.user_id)),
+    [sorted],
+  )
 
   return (
     <section className="rounded-lg border border-border bg-card overflow-hidden">
@@ -139,7 +144,7 @@ export default function WorkspaceMembersAside({ workspaceId }: { workspaceId: nu
         <ul className="max-h-[min(22rem,calc(100vh-20rem))] overflow-y-auto divide-y divide-border">
           {sorted.map((m) => (
             <li key={m.user_id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-muted/30 transition-colors">
-              <MemberAvatar member={m} />
+              <MemberAvatar member={m} avatarColorMap={avatarColorMap} />
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-foreground truncate">{m.name}</p>
                 <p className="text-[11px] text-muted-foreground truncate">{m.email}</p>

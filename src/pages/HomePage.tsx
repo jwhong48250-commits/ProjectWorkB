@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import clsx from 'clsx'
-import { Sparkles, Calendar, ExternalLink, Loader2, X } from 'lucide-react'
+import { Sparkles, Calendar, ExternalLink, Loader2, X, ChevronLeft, ChevronRight } from 'lucide-react'
 import MeetingCard from '../components/home/MeetingCard'
 import WeeklyStatsCard from '../components/home/WeeklyStats'
 import WorkspaceMembersAside from '../components/home/WorkspaceMembersAside'
@@ -11,6 +11,8 @@ import { fetchWorkspaceDashboard } from '../api/dashboard'
 import { persistMeetingSnapshot } from '../utils/meetingRoutes'
 import { suggestNextMeeting, type TimeSlot } from '../api/actions'
 import { getCurrentWorkspaceId, WORKSPACE_CHANGED_EVENT } from '../utils/workspace'
+
+const DASHBOARD_PAGE_SIZE = 10
 
 type Tab = MeetingStatus
 
@@ -22,6 +24,7 @@ const TABS: { id: Tab; label: string }[] = [
 
 export default function HomePage() {
   const [activeTab, setActiveTab] = useState<Tab>('inprogress')
+  const [listPage, setListPage] = useState(1)
   const [meetings, setMeetings] = useState<Meeting[]>([])
   const [weeklyStats, setWeeklyStats] = useState<WeeklyStats | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -62,6 +65,14 @@ export default function HomePage() {
     () => meetings.filter((m) => m.status === activeTab),
     [meetings, activeTab],
   )
+
+  const totalListPages = Math.max(1, Math.ceil(filtered.length / DASHBOARD_PAGE_SIZE))
+  const effectiveListPage = Math.min(listPage, totalListPages)
+
+  const paginatedMeetings = useMemo(() => {
+    const start = (effectiveListPage - 1) * DASHBOARD_PAGE_SIZE
+    return filtered.slice(start, start + DASHBOARD_PAGE_SIZE)
+  }, [filtered, effectiveListPage])
 
   return (
     <>
@@ -110,7 +121,10 @@ export default function HomePage() {
                   key={tab.id}
                   role="tab"
                   aria-selected={activeTab === tab.id}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => {
+                    setActiveTab(tab.id)
+                    setListPage(1)
+                  }}
                   className={clsx(
                     'flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
                     activeTab === tab.id
@@ -145,11 +159,36 @@ export default function HomePage() {
             {filtered.length === 0 ? (
               <EmptyState status={activeTab} />
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {filtered.map((meeting) => (
-                  <MeetingCard key={meeting.id} meeting={meeting} />
-                ))}
-              </div>
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {paginatedMeetings.map((meeting) => (
+                    <MeetingCard key={meeting.id} meeting={meeting} />
+                  ))}
+                </div>
+                {totalListPages > 1 && (
+                  <div className="flex items-center justify-center gap-3 mt-6">
+                    <button
+                      type="button"
+                      onClick={() => setListPage(Math.max(1, effectiveListPage - 1))}
+                      disabled={effectiveListPage === 1}
+                      className="flex items-center gap-1 h-8 px-3 rounded-lg border border-border text-sm text-muted-foreground hover:bg-muted/50 transition-colors disabled:opacity-40"
+                    >
+                      <ChevronLeft size={14} /> 이전
+                    </button>
+                    <span className="text-sm text-muted-foreground">
+                      {effectiveListPage} / {totalListPages}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setListPage(Math.min(totalListPages, effectiveListPage + 1))}
+                      disabled={effectiveListPage === totalListPages}
+                      className="flex items-center gap-1 h-8 px-3 rounded-lg border border-border text-sm text-muted-foreground hover:bg-muted/50 transition-colors disabled:opacity-40"
+                    >
+                      다음 <ChevronRight size={14} />
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

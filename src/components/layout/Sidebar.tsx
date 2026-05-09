@@ -361,32 +361,12 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "설정",
     items: [
-      {
-        to: "/settings/workspace",
-        label: "워크스페이스",
-        icon: LayoutGrid,
-        adminOnly: true,
-      },
-      {
-        to: "/settings/members",
-        label: "멤버 · 권한",
-        icon: Users,
-        adminOnly: true,
-      },
-      {
-        to: "/settings/departments",
-        label: "부서 관리",
-        icon: Building2,
-        adminOnly: true,
-      },
-      { to: "/settings/voice", label: "화자 등록", icon: Mic },
-      {
-        to: "/settings/integrations",
-        label: "연동 관리",
-        icon: Link2,
-        adminOnly: true,
-      },
-      { to: "/settings/device", label: "장비 설정", icon: Gauge, adminOnly: true },
+      { to: "/settings/workspace", label: "워크스페이스 관리", icon: LayoutGrid, adminOnly: true },
+      { to: "/settings/members", label: "멤버 · 권한 관리", icon: Users, adminOnly: true },
+      { to: "/settings/departments", label: "부서 관리", icon: Building2, adminOnly: true },
+      { to: "/settings/voice", label: "화자 등록 관리", icon: Mic },
+      { to: "/settings/integrations", label: "연동 관리", icon: Link2, adminOnly: true },
+      { to: "/settings/device", label: "장비 관리", icon: Gauge, adminOnly: true },
     ],
   },
 ];

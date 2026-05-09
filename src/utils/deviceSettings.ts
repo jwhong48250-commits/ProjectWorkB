@@ -1,7 +1,6 @@
 export const DEVICE_SETTINGS_STORAGE_KEY = 'workb-device-settings'
 
 export interface StoredDeviceSettings {
-  isMainDevice: boolean
   selectedMicId: string
   selectedCameraId: string
   micEnabled: boolean

@@ -26,13 +26,13 @@ export default function WeeklyStatsCard({ stats }: WeeklyStatsProps) {
       <div className="grid grid-cols-2 gap-3 mb-4">
         <StatTile
           icon={<Video size={14} className="text-status-inprogress" />}
-          value={stats.totalMeetings}
+          value={`${stats.totalMeetings}개`}
           label="회의 수"
           bg="bg-status-inprogress-bg"
         />
         <StatTile
           icon={<Clock size={14} className="text-status-upcoming" />}
-          value={`${Math.floor(stats.totalMinutes / 60)}h ${stats.totalMinutes % 60}m`}
+          value={`${Math.floor(stats.totalMinutes / 60)}시간 ${stats.totalMinutes % 60}분`}
           label="총 회의 시간"
           bg="bg-status-upcoming-bg"
         />

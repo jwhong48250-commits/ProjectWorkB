@@ -69,7 +69,7 @@ export default function PasswordSettingsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-xl px-4 py-6 sm:px-6">
+    <div className="mx-auto max-w-2xl px-4 py-6 sm:px-6">
       <div className="mb-6">
         <h1 className="mb-1 text-xl font-semibold text-foreground">비밀번호 변경</h1>
         <p className="text-sm text-muted-foreground">계정 로그인에 사용하는 비밀번호를 변경합니다.</p>

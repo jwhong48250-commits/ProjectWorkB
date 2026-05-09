@@ -230,12 +230,15 @@ export default function UpcomingMeetingPage() {
           block
         >
           <button
-            onClick={() => {
+            onClick={async () => {
               // Live 페이지가 아직 목업 기반이어서, 실제 회의 정보를 스냅샷으로 전달
+              try {
+                await startWorkspaceMeeting(workspaceId, Number(meeting.id))
+              } catch (err) {
+                alert(err instanceof Error ? err.message : '회의 시작에 실패했습니다.')
+                return
+              }
               persistMeetingSnapshot(meeting)
-              startWorkspaceMeeting(workspaceId, Number(meeting.id)).catch(() => {
-                // 상태 전환 실패해도 입장은 허용 (대시보드 분류만 늦게 반영될 수 있음)
-              })
               navigate(`/live/${meeting.id}`, { state: { meeting } })
             }}
             className={
