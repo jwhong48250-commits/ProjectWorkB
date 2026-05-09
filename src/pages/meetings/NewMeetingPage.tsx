@@ -4,6 +4,7 @@ import { Users, Tag, Search, X, UsersRound } from 'lucide-react'
 import type { Meeting, Participant } from '../../types/meeting'
 import DatePicker from '../../components/ui/DatePicker'
 import TimePicker from '../../components/ui/TimePicker'
+import { Avatar } from '../../components/ui/Avatar'
 import { getCurrentWorkspaceId, WORKSPACE_CHANGED_EVENT } from '../../utils/workspace'
 import { apiRequest } from '../../api/client'
 import { getDepartments, getWorkspaceMembers, type Department as WorkspaceDepartment } from '../../api/workspace'
@@ -442,13 +443,7 @@ export default function NewMeetingPage() {
                   key={p.id}
                   className="flex items-center gap-1.5 pl-1.5 pr-1 py-0.5 rounded-full border border-accent bg-accent-subtle text-accent text-sm"
                 >
-                  <span
-                    className="w-4 h-4 rounded-full flex items-center justify-center text-white text-micro shrink-0"
-                    style={{ backgroundColor: p.color }}
-                    aria-hidden="true"
-                  >
-                    {p.avatarInitials[0]}
-                  </span>
+                  <Avatar participant={p} size="sm" className="w-4 h-4 text-[9px]" />
                   {p.name}
                   {p.department && (
                     <span className="text-micro text-accent/60">({p.department})</span>
@@ -574,13 +569,7 @@ export default function NewMeetingPage() {
                               : 'text-foreground hover:bg-muted/50'
                           }`}
                         >
-                          <span
-                            className="w-6 h-6 rounded-full flex items-center justify-center text-white text-micro shrink-0"
-                            style={{ backgroundColor: p.color }}
-                            aria-hidden="true"
-                          >
-                            {p.avatarInitials[0]}
-                          </span>
+                          <Avatar participant={p} size="sm" />
                           <span className="flex-1">{p.name}</span>
                           {p.department && (
                             <span className="text-mini text-muted-foreground">{p.department}</span>

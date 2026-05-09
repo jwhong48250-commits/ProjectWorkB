@@ -80,8 +80,14 @@ export default function MyPage() {
   }, [user?.gender])
 
   useEffect(() => {
+    const remoteProfileImage = user?.profile_image_url ?? ''
+    if (remoteProfileImage) {
+      setProfileImage(profileImageUserId, remoteProfileImage)
+      setDraftProfileImage(remoteProfileImage)
+      return
+    }
     setDraftProfileImage(getProfileImage(profileImageUserId))
-  }, [profileImageUserId])
+  }, [profileImageUserId, user?.profile_image_url])
 
   useEffect(() => {
     let active = true
@@ -158,6 +164,13 @@ export default function MyPage() {
     try {
       const { image_url } = await uploadMyProfileImage(file)
       setDraftProfileImage(image_url)
+      setProfileImage(profileImageUserId, image_url)
+      if (user) {
+        saveUser({
+          ...user,
+          profile_image_url: image_url,
+        })
+      }
       setError('')
       setMessage('')
     } catch (err) {
