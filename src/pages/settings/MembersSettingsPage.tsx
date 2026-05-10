@@ -277,14 +277,14 @@ export default function MembersSettingsPage() {
       {/* Member table */}
       <div className="select-none rounded-lg border border-border overflow-x-auto bg-card">
         {/* Table header — desktop only */}
-        <div className={`hidden md:grid ${DESKTOP_MEMBER_GRID} gap-3 px-4 py-2 bg-muted/40 border-b border-border text-center text-micro font-medium text-muted-foreground uppercase tracking-wide`}>
-          <span>멤버</span>
-          <span>역할</span>
-          <span>부서</span>
-          <span>생년월일</span>
-          <span>나이</span>
-          <span>성별</span>
-          <span>권한</span>
+        <div className={`hidden md:grid ${DESKTOP_MEMBER_GRID} gap-3 px-4 py-2 bg-muted/40 border-b border-border text-micro font-medium text-muted-foreground uppercase tracking-wide`}>
+          <span className="text-left">멤버</span>
+          <span className="text-center">역할</span>
+          <span className="text-center">부서</span>
+          <span className="text-center">생년월일</span>
+          <span className="text-center">나이</span>
+          <span className="text-center">성별</span>
+          <span className="text-center">권한</span>
         </div>
         {members.map((member) => (
           <div key={member.user_id} className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors">

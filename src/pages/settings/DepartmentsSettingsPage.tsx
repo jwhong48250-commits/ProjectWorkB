@@ -202,12 +202,12 @@ export default function DepartmentsSettingsPage() {
         </div>
       </form>
 
-      <div className="rounded-lg border border-border overflow-x-auto bg-card">
-        <div className={`hidden md:grid ${DEPARTMENT_TABLE_GRID} gap-3 px-6 py-2 bg-muted/40 border-b border-border text-center text-micro font-medium text-muted-foreground uppercase tracking-wide`}>
-          <span className="text-left md:pl-14">부서명</span>
-          <span>소속 멤버</span>
-          <span>생성일</span>
-          <span>관리</span>
+      <div className="select-none rounded-lg border border-border overflow-x-auto bg-card">
+        <div className={`hidden md:grid ${DEPARTMENT_TABLE_GRID} gap-3 px-4 py-2 bg-muted/40 border-b border-border text-micro font-medium text-muted-foreground uppercase tracking-wide`}>
+          <span className="text-left">부서명</span>
+          <span className="text-center">소속 멤버</span>
+          <span className="text-center">생성일</span>
+          <span className="text-center">관리</span>
         </div>
 
         {departments.length === 0 ? (
@@ -220,23 +220,23 @@ export default function DepartmentsSettingsPage() {
           const memberCount = getDepartmentMemberCount(department.department_id)
 
           return (
-            <div key={department.department_id} className="px-6 py-3 border-b border-border last:border-0 hover:bg-muted/20 transition-colors">
+            <div key={department.department_id} className="px-4 py-3 border-b border-border last:border-0 hover:bg-muted/20 transition-colors">
               <div className={`grid grid-cols-1 ${DEPARTMENT_TABLE_GRID} gap-3 md:items-center`}>
-                <div className="min-w-0 md:pl-5">
+                <div className="min-w-0 w-full text-left">
                   {isEditing ? (
                     <input
                       type="text"
                       value={editingName}
                       onChange={(event) => setEditingName(event.target.value)}
-                      className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+                      className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm text-left outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
                       autoFocus
                     />
                   ) : (
-                    <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="flex items-center gap-2.5 min-w-0 justify-start">
                       <div className="w-8 h-8 rounded-lg bg-accent-subtle flex items-center justify-center shrink-0">
                         <Building2 size={15} className="text-accent" />
                       </div>
-                      <div className="min-w-0">
+                      <div className="min-w-0 text-left">
                         <p className="text-sm font-medium text-foreground truncate">{department.name}</p>
                         <p className="md:hidden text-mini text-muted-foreground">
                           소속 멤버 {memberCount}명 · {formatDate(department.created_at)}

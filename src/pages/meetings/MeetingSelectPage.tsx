@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Search, Clock, Users, ChevronRight, ChevronLeft, FileText, CalendarDays } from 'lucide-react'
+import { Search, Clock, ChevronRight, ChevronLeft, FileText, CalendarDays } from 'lucide-react'
 import clsx from 'clsx'
 import { getCurrentWorkspaceId } from '../../api/client'
 import { fetchDoneMeetings, type MeetingHistoryItem } from '../../api/meetings'
@@ -96,53 +96,51 @@ export default function MeetingSelectPage() {
         />
       </form>
 
-      {/* 회의 목록 — 기존 카드 구조 동일 */}
+      {/* 회의 목록 */}
       {meetings.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 gap-3 text-muted-foreground">
           <Search size={32} className="opacity-20" />
           <p className="text-sm">{keyword ? '검색 결과가 없습니다.' : '완료된 회의가 없습니다.'}</p>
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {meetings.map((meeting) => {
             const date = pickDate(meeting)
             return (
               <button
                 key={meeting.id}
+                type="button"
                 onClick={() => handleSelect(meeting)}
                 className={clsx(
-                  'group flex items-start gap-4 p-4 rounded-xl border border-border bg-card text-left',
-                  'hover:border-accent/60 hover:bg-accent/5 hover:shadow-sm transition-all duration-150',
+                  'group rounded-2xl border border-border bg-card p-4 text-left',
+                  'transition-all duration-150 hover:border-accent/60 hover:bg-accent/5 hover:shadow-sm',
                 )}
               >
-                <div className="flex flex-col items-center justify-center w-11 h-11 rounded-lg bg-muted shrink-0">
-                  <CalendarDays size={18} className="text-muted-foreground mb-0.5" />
-                  <span className="text-micro text-muted-foreground font-medium">{new Date(date).getDate()}일</span>
+                <div className="flex items-start justify-between gap-3">
+                  <span className="inline-flex h-6 items-center gap-1 rounded-full bg-muted px-2 text-[11px] text-muted-foreground">
+                    <CalendarDays size={11} />
+                    {formatDate(date)}
+                  </span>
+                  <ChevronRight
+                    size={15}
+                    className="mt-0.5 shrink-0 text-muted-foreground transition-all group-hover:translate-x-0.5 group-hover:text-accent"
+                  />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-foreground truncate group-hover:text-accent transition-colors">
-                    {meeting.title}
-                  </p>
-                  {meeting.summary && (
-                    <p className="text-mini text-muted-foreground mt-0.5 line-clamp-1">{parseSummaryPreview(meeting.summary)}</p>
-                  )}
-                  <div className="flex items-center gap-3 mt-2 text-mini text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <CalendarDays size={10} />
-                      {formatDate(date)} {formatTime(date)}
+                <p className="mt-3 line-clamp-2 text-sm font-semibold text-foreground transition-colors group-hover:text-accent">
+                  {meeting.title}
+                </p>
+                <p className="mt-1.5 min-h-8 line-clamp-2 text-mini text-muted-foreground">
+                  {parseSummaryPreview(meeting.summary) || '요약이 아직 생성되지 않았습니다.'}
+                </p>
+                <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/70 pt-3 text-mini text-muted-foreground">
+                  <span>{formatTime(date)}</span>
+                  {meeting.started_at && meeting.ended_at && (
+                    <span className="inline-flex items-center gap-1">
+                      <Clock size={10} />
+                      {Math.round((new Date(meeting.ended_at).getTime() - new Date(meeting.started_at).getTime()) / 60000)}분
                     </span>
-                    {meeting.started_at && meeting.ended_at && (
-                      <span className="flex items-center gap-1">
-                        <Clock size={10} />
-                        {Math.round((new Date(meeting.ended_at).getTime() - new Date(meeting.started_at).getTime()) / 60000)}분
-                      </span>
-                    )}
-                  </div>
+                  )}
                 </div>
-                <ChevronRight
-                  size={16}
-                  className="text-muted-foreground shrink-0 mt-3 group-hover:text-accent group-hover:translate-x-0.5 transition-all"
-                />
               </button>
             )
           })}

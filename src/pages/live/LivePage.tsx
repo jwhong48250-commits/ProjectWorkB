@@ -307,32 +307,62 @@ export default function LivePage() {
     }
   }, [wsStatus, isEndingMeeting, meetingId]);
 
-  // summary 생성 대기 폴링: 최대 90초(10회×10초), summary 확인되면 즉시 이동
+  // 회의 종료 후: 요약이 있으면 이동, 없어도 서버에서 completed면 이동(파이프라인 실패 대비).
+  // 요청 타임아웃·최대 대기 후에는 무조건 노트 화면으로 이동.
   useEffect(() => {
     if (!pendingNavigateToNotes) return;
     const workspaceId = getCurrentWorkspaceId();
+    const numericId = Number(meetingId);
     let cancelled = false;
 
+    const FETCH_MS = 12_000;
+    const POLL_MS = 2_500;
+    const MAX_WAIT_MS = 90_000;
+
+    function fetchDetailWithTimeout(): Promise<Meeting> {
+      return Promise.race([
+        fetchWorkspaceMeetingDetail(workspaceId, numericId),
+        new Promise<never>((_, rej) => {
+          setTimeout(() => rej(new Error("timeout")), FETCH_MS);
+        }),
+      ]);
+    }
+
+    function shouldNavigate(detail: Meeting): boolean {
+      const sum = detail.summary?.trim();
+      if (sum) return true;
+      return detail.status === "completed";
+    }
+
     async function pollAndGo() {
-      for (let i = 0; i < 10; i++) {
-        if (cancelled) return;
+      const deadline = Date.now() + MAX_WAIT_MS;
+      while (!cancelled && Date.now() < deadline) {
         try {
-          const detail = await fetchWorkspaceMeetingDetail(
-            workspaceId,
-            Number(meetingId),
-          );
-          if (detail?.summary) {
+          const detail = await fetchDetailWithTimeout();
+          if (shouldNavigate(detail)) {
             navigate(`/meetings/${meetingId}/notes`, {
               state: { meeting: detail },
             });
             return;
           }
         } catch {
-          // ignore fetch errors, keep polling
+          /* 네트워크/타임아웃 — 재시도 */
         }
-        if (i < 9) await new Promise<void>((r) => setTimeout(r, 10000));
+        await new Promise<void>((r) => setTimeout(r, POLL_MS));
       }
-      if (!cancelled) navigate(`/meetings/${meetingId}/notes`);
+      if (!cancelled) {
+        try {
+          const detail = await fetchWorkspaceMeetingDetail(
+            workspaceId,
+            numericId,
+          );
+          navigate(`/meetings/${meetingId}/notes`, {
+            state: { meeting: detail },
+          });
+        } catch {
+          navigate(`/meetings/${meetingId}/notes`);
+        }
+      }
     }
 
     void pollAndGo();

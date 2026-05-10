@@ -18,8 +18,8 @@ export function getCurrentWorkspaceId(): number {
   if (Number.isFinite(n) && n > 0) {
     sessionStorage.setItem(KEY, String(n))
     sessionStorage.setItem(LEGACY_KEY, String(n))
-    localStorage.removeItem(KEY)
-    localStorage.removeItem(LEGACY_KEY)
+    localStorage.setItem(KEY, String(n))
+    localStorage.setItem(LEGACY_KEY, String(n))
   }
   return Number.isFinite(n) && n > 0 ? n : 1
 }
@@ -28,8 +28,8 @@ export function setCurrentWorkspaceId(id: number): void {
   if (!Number.isFinite(id) || id <= 0) return
   sessionStorage.setItem(KEY, String(id))
   sessionStorage.setItem(LEGACY_KEY, String(id))
-  localStorage.removeItem(KEY)
-  localStorage.removeItem(LEGACY_KEY)
+  localStorage.setItem(KEY, String(id))
+  localStorage.setItem(LEGACY_KEY, String(id))
   // 같은 탭에서는 storage 이벤트가 안 떠서 커스텀 이벤트로 통지
   window.dispatchEvent(new CustomEvent(WORKSPACE_CHANGED_EVENT, { detail: { id } }))
 }
@@ -40,7 +40,7 @@ export function getCurrentWorkspaceRole(): WorkspaceRole {
   const role = sessionStorage.getItem(ROLE_KEY) ?? localStorage.getItem(ROLE_KEY)
   if (role) {
     sessionStorage.setItem(ROLE_KEY, role)
-    localStorage.removeItem(ROLE_KEY)
+    localStorage.setItem(ROLE_KEY, role)
   }
   return role ?? 'member'
 }
@@ -48,7 +48,7 @@ export function getCurrentWorkspaceRole(): WorkspaceRole {
 export function setCurrentWorkspaceRole(role: WorkspaceRole): void {
   const normalized = typeof role === 'string' && role.length > 0 ? role : 'member'
   sessionStorage.setItem(ROLE_KEY, normalized)
-  localStorage.removeItem(ROLE_KEY)
+  localStorage.setItem(ROLE_KEY, normalized)
   window.dispatchEvent(
     new CustomEvent(WORKSPACE_ROLE_CHANGED_EVENT, { detail: { role: normalized } }),
   )

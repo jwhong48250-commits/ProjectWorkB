@@ -116,6 +116,9 @@ export default function NotesPage() {
     0,
     utterances.length - visibleUtterances.length,
   );
+  /** 발화 목록을 정상 로드했는데 비어 있음 → 실질적 회의 진행·전사 없음 */
+  const noTranscriptAfterLoad =
+    !utterancesLoading && !utterancesError && utterances.length === 0;
 
   useEffect(() => {
     if (!meetingId || passedMeeting !== null) return;
@@ -617,8 +620,24 @@ export default function NotesPage() {
       </div>
 
       <div className="space-y-6">
-        {/* Summary */}
-        {meeting.summary && (
+        {noTranscriptAfterLoad && (
+          <div
+            role="status"
+            className="rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/80 dark:bg-amber-950/30 px-4 py-3.5"
+          >
+            <p className="text-sm font-semibold text-foreground">
+              회의가 진행된 기록이 없습니다
+            </p>
+            <p className="text-mini text-muted-foreground mt-1.5 leading-relaxed">
+              녹음·전사된 발화가 없습니다. 입장만 하고 종료했거나, 마이크·수집
+              설정으로 음성이 저장되지 않았을 수 있습니다. 아래 회의록·요약도
+              실제 논의가 없으면 비어 있거나 안내 문구만 표시됩니다.
+            </p>
+          </div>
+        )}
+
+        {/* Summary — 발화 없음(정상 로드)이면 백엔드 요약이 남아 있어도 숨김 */}
+        {meeting.summary && !noTranscriptAfterLoad && (
           <section>
             <h2 className="text-base font-semibold text-foreground mb-2">
               요약
@@ -681,9 +700,24 @@ export default function NotesPage() {
           {!utterancesLoading &&
             !utterancesError &&
             utterances.length === 0 && (
-              <p className="text-sm text-muted-foreground py-4 text-center">
-                저장된 발화 데이터가 없습니다.
-              </p>
+              <div
+                role="status"
+                className="rounded-xl border border-border bg-muted/25 px-4 py-6 text-center"
+              >
+                <MessageSquare
+                  size={22}
+                  className="mx-auto text-muted-foreground/70 mb-2"
+                  aria-hidden
+                />
+                <p className="text-sm font-semibold text-foreground">
+                  진행된 회의 내용이 없습니다
+                </p>
+                <p className="text-mini text-muted-foreground mt-2 leading-relaxed max-w-md mx-auto">
+                  저장된 발화·전사 데이터가 없습니다. 회의 중 음성이 수집되지
+                  않았거나, 마이크가 꺼져 있었거나, 전사 결과가 아직 반영되지
+                  않았을 수 있습니다.
+                </p>
+              </div>
             )}
 
           {!utterancesLoading && !utterancesError && utterances.length > 0 && (

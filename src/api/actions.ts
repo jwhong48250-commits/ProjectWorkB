@@ -244,11 +244,12 @@ export interface MinutesResponse {
 }
 
 export interface MinutesPdfPreview {
-  preview_b64:  string
-  field_coords: Record<string, never>
-  field_values: Record<string, string>
-  pdf_width:    number
-  pdf_height:   number
+  preview_b64:   string
+  preview_pages: string[]
+  field_coords:  Record<string, never>
+  field_values:  Record<string, string>
+  pdf_width:     number
+  pdf_height:    number
 }
 
 export function generateMinutes(meetingId: string | number, workspaceId: number) {

@@ -139,7 +139,7 @@ export default function LiveImagePanel({ workspaceId, meetingId, camOn, stream, 
         {captures[0]?.photo && (
           <span className="text-mini text-muted-foreground inline-flex items-center gap-1">
             <UploadCloud size={12} className="text-muted-foreground" />
-            저장됨 (id: {captures[0].photo.id})
+            저장됨
           </span>
         )}
       </div>
@@ -163,11 +163,6 @@ export default function LiveImagePanel({ workspaceId, meetingId, camOn, stream, 
             <div className="flex flex-col">
               {captures.map((c) => (
                 <div key={c.photo.id} className="border-t border-border first:border-t-0">
-                  <div className="px-3 py-2 bg-muted/20">
-                    <p className="text-micro text-muted-foreground">
-                      id: {c.photo.id} · DB 저장 경로: <span className="break-all">{c.photo.photo_url}</span>
-                    </p>
-                  </div>
                   <img src={c.localUrl} alt={`캡처 ${c.photo.id}`} className="w-full h-auto block" />
                 </div>
               ))}
