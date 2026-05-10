@@ -318,11 +318,9 @@ function PdfOverlayEditor({
     <div className="rounded-xl border border-border bg-card overflow-hidden">
       {/* 헤더 */}
       <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between px-4 py-3 border-b border-border bg-muted/30">
-        <div className="flex flex-col gap-0.5 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <FileText size={13} className="text-accent shrink-0" />
-            <span className="text-sm font-medium text-foreground">PDF 미리보기 · 직접 편집</span>
-          </div>
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
+          <FileText size={13} className="text-accent shrink-0" />
+          <span className="text-sm font-medium text-foreground">PDF 미리보기 · 직접 편집</span>
         </div>
         <div className="flex items-center gap-1.5 flex-wrap shrink-0">
           {pdfPreview && (
@@ -358,24 +356,77 @@ function PdfOverlayEditor({
               <Download size={11} /> PDF 다운로드
             </button>
           )}
+          {pdfPreview && editableFieldKeys.length > 0 && (
+            <button
+              onClick={() => setShowEditPanel(p => !p)}
+              className={clsx(
+                'flex items-center gap-1 h-7 px-2.5 rounded border text-mini transition-colors',
+                showEditPanel
+                  ? 'border-accent bg-accent/10 text-accent'
+                  : 'border-border hover:bg-muted',
+              )}
+            >
+              {showEditPanel ? <X size={11} /> : <Pencil size={11} />}
+              {showEditPanel ? '편집 닫기' : '편집'}
+            </button>
+          )}
           <button
             onClick={onRegenerate}
-            disabled={generating}
+            disabled={generating || loading}
             className="flex items-center gap-1 h-7 px-2.5 rounded border border-border text-mini hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {generating
+            {generating || loading
               ? <><Loader2 size={11} className="animate-spin" /> 생성 중...</>
               : pdfPreview
                 ? <><RefreshCw size={11} /> 회의록 재생성</>
                 : <><Sparkles size={11} /> 회의록 생성</>}
           </button>
-          {loading && (
-            <span className="flex items-center gap-1 text-mini text-muted-foreground">
-              <Loader2 size={11} className="animate-spin" /> 생성 중...
-            </span>
-          )}
         </div>
       </div>
+
+      {/* 편집 패널 — 스크롤 영역 밖, 항상 접근 가능 */}
+      {showEditPanel && pdfPreview && editableFieldKeys.length > 0 && (
+        <div className="border-b border-border bg-muted/10">
+          <div className="max-h-64 overflow-y-auto px-4 py-3 flex flex-col gap-3">
+            {editableFieldKeys.map((fieldKey) => (
+              <div key={fieldKey}>
+                <label className="block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                  {FIELD_LABEL[fieldKey] ?? fieldKey}
+                </label>
+                <textarea
+                  value={editValues[fieldKey] ?? ''}
+                  onFocus={() => setFocusedKey(fieldKey)}
+                  onBlur={() => setFocusedKey(null)}
+                  onChange={e => {
+                    setEditValues(prev => ({ ...prev, [fieldKey]: e.target.value }))
+                    setIsDirty(true)
+                  }}
+                  rows={metaFields.has(fieldKey)
+                    ? Math.max(1, Math.min(5, (editValues[fieldKey] ?? '').split('\n').length))
+                    : uniformRows}
+                  className={clsx(
+                    'w-full px-2 py-1 text-[11px] rounded border bg-background text-foreground outline-none resize-none leading-relaxed transition-colors',
+                    focusedKey === fieldKey
+                      ? 'border-accent ring-1 ring-accent/20'
+                      : 'border-border',
+                  )}
+                />
+              </div>
+            ))}
+          </div>
+          <div className="px-4 py-2.5 border-t border-border bg-muted/20">
+            <button
+              onClick={handleApply}
+              disabled={loading || !isDirty}
+              className="h-8 px-4 rounded-lg bg-accent text-accent-foreground text-xs font-semibold flex items-center gap-1.5 hover:bg-accent/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {loading
+                ? <><Loader2 size={11} className="animate-spin" /> 생성 중...</>
+                : <><RefreshCw size={11} /> 반영</>}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 빈 상태 */}
       {!pdfPreview && !loading && (
@@ -392,85 +443,23 @@ function PdfOverlayEditor({
 
       {pdfPreview && (
         <>
-          {/* PDF 이미지 + 인라인 편집 패널 — 배경은 용지 느낌 */}
-          <div className="p-3 sm:p-4 bg-stone-200/60 dark:bg-stone-950/50 flex justify-center overflow-auto">
-            {/* zoom: 이미지와 오버레이가 한 덩어리로 확대되어 좌표가 어긋나지 않음 (Firefox 미지원 시 100% 유지 권장) */}
+          {/* PDF 이미지 — 스크롤 영역 */}
+          <div className="p-3 sm:p-4 bg-stone-200/60 dark:bg-stone-950/50 flex justify-center overflow-auto max-h-[72vh]">
             <div
-              className="relative inline-block select-none origin-top"
-              style={{
-                zoom: PDF_PREVIEW_ZOOM_LEVELS[zoomIdx],
-              }}
+              className="inline-block select-none origin-top"
+              style={{ zoom: PDF_PREVIEW_ZOOM_LEVELS[zoomIdx] }}
             >
-              <img
-                src={`data:image/png;base64,${pdfPreview.preview_b64}`}
-                alt="PDF 미리보기"
-                className="max-w-full rounded-sm shadow-md border border-stone-300/90 dark:border-stone-600 block bg-white"
-                draggable={false}
-              />
-
-              {editableFieldKeys.length > 0 && (
-                <button
-                  onClick={() => setShowEditPanel(p => !p)}
-                  className="absolute top-2 right-2 z-10 flex items-center gap-1 h-7 px-2.5 rounded-lg bg-background/90 border border-border text-xs font-medium shadow-sm hover:bg-background transition-colors"
-                >
-                  {showEditPanel ? <X size={10} /> : <Pencil size={10} />}
-                  {showEditPanel ? '닫기' : '편집'}
-                </button>
-              )}
-
-              {showEditPanel && editableFieldKeys.length > 0 && (
-                <div className="absolute top-0 right-0 w-56 h-full bg-background border-l border-border flex flex-col z-20 shadow-xl rounded-r overflow-hidden">
-                  <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0 bg-muted/30">
-                    <span className="text-xs font-semibold text-foreground">내용 편집</span>
-                    <button
-                      onClick={() => setShowEditPanel(false)}
-                      className="p-0.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-
-                  <div className="flex-1 overflow-y-auto px-3 py-2.5 flex flex-col gap-3">
-                    {editableFieldKeys.map((fieldKey) => (
-                      <div key={fieldKey}>
-                        <label className="block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                          {FIELD_LABEL[fieldKey] ?? fieldKey}
-                        </label>
-                        <textarea
-                          value={editValues[fieldKey] ?? ''}
-                          onFocus={() => setFocusedKey(fieldKey)}
-                          onBlur={() => setFocusedKey(null)}
-                          onChange={e => {
-                            setEditValues(prev => ({ ...prev, [fieldKey]: e.target.value }))
-                            setIsDirty(true)
-                          }}
-                          rows={metaFields.has(fieldKey)
-                            ? Math.max(1, Math.min(5, (editValues[fieldKey] ?? '').split('\n').length))
-                            : uniformRows}
-                          className={clsx(
-                            'w-full px-2 py-1 text-[11px] rounded border bg-background text-foreground outline-none resize-none leading-relaxed transition-colors',
-                            focusedKey === fieldKey
-                              ? 'border-accent ring-1 ring-accent/20'
-                              : 'border-border',
-                          )}
-                        />
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="px-3 py-2.5 border-t border-border shrink-0">
-                    <button
-                      onClick={handleApply}
-                      disabled={loading || !isDirty}
-                      className="w-full h-8 rounded-lg bg-accent text-accent-foreground text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-accent/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      {loading
-                        ? <><Loader2 size={11} className="animate-spin" /> 생성 중...</>
-                        : <><RefreshCw size={11} /> 반영</>}
-                    </button>
-                  </div>
-                </div>
-              )}
+              <div className="flex flex-col gap-3">
+                {(pdfPreview.preview_pages?.length > 0 ? pdfPreview.preview_pages : [pdfPreview.preview_b64]).map((pageB64, idx) => (
+                  <img
+                    key={idx}
+                    src={`data:image/png;base64,${pageB64}`}
+                    alt={`PDF 미리보기 ${idx + 1}페이지`}
+                    className="max-w-full rounded-sm shadow-md border border-stone-300/90 dark:border-stone-600 block bg-white"
+                    draggable={false}
+                  />
+                ))}
+              </div>
             </div>
           </div>
 

@@ -111,9 +111,14 @@ export default function HistoryPage() {
     const initialKeyword = (searchParams.get("keyword") ?? "").trim();
     const initialDateRaw = (searchParams.get("date") ?? "").trim();
     const initialDate = isYmd(initialDateRaw) ? initialDateRaw : "";
+    const initialStatusRaw = searchParams.get("status") ?? "all";
+    const initialStatus: "all" | "scheduled" | "done" = (
+        ["all", "scheduled", "done"].includes(initialStatusRaw) ? initialStatusRaw : "all"
+    ) as "all" | "scheduled" | "done";
 
     const [searchKeyword, setSearchKeyword] = useState(initialKeyword);
     const [filterDate, setFilterDate] = useState(initialDate);
+    const [statusFilter, setStatusFilter] = useState<"all" | "scheduled" | "done">(initialStatus);
     const [participantFilter, setParticipantFilter] = useState<string | null>(null);
     const [workspaceMembers, setWorkspaceMembers] = useState<{ user_id: number; name: string }[]>([]);
     const [membersLoading, setMembersLoading] = useState(false);
@@ -134,6 +139,11 @@ export default function HistoryPage() {
         setFilterDate(initialDate);
         setPage(1);
     }, [initialDate]);
+
+    useEffect(() => {
+        setStatusFilter(initialStatus);
+        setPage(1);
+    }, [initialStatus]);
 
     useEffect(() => {
         function onWsChanged(e: Event) {
@@ -178,6 +188,7 @@ export default function HistoryPage() {
             const pid = participantFilter ? Number(participantFilter) : NaN;
             if (Number.isFinite(pid) && pid > 0) qs.set("participant_user_id", String(pid));
             if (filterDate && isYmd(filterDate)) qs.set("date", filterDate);
+            if (statusFilter !== "all") qs.set("status", statusFilter);
             qs.set("page", String(page));
             qs.set("size", String(HISTORY_PAGE_SIZE));
 
@@ -204,7 +215,7 @@ export default function HistoryPage() {
             clearTimeout(handle);
             controller.abort();
         };
-    }, [searchKeyword, workspaceId, participantFilter, filterDate, page]);
+    }, [searchKeyword, workspaceId, participantFilter, filterDate, statusFilter, page]);
 
     useEffect(() => {
         setPage(1);
@@ -269,6 +280,35 @@ export default function HistoryPage() {
                         size={13}
                         className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
                     />
+                    <ChevronDown
+                        size={12}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+                    />
+                </div>
+
+                {/* Status filter */}
+                <div className="relative">
+                    <select
+                        value={statusFilter}
+                        onChange={(e) => {
+                            const next = e.target.value as "all" | "scheduled" | "done";
+                            setStatusFilter(next);
+                            setPage(1);
+                            const params = new URLSearchParams(searchParams);
+                            if (next !== "all") params.set("status", next);
+                            else params.delete("status");
+                            setSearchParams(params, { replace: true });
+                        }}
+                        className={clsx(
+                            "appearance-none h-8 pl-3 pr-7 rounded border text-sm bg-card cursor-pointer",
+                            "border-border hover:border-muted-foreground transition-colors outline-none",
+                            statusFilter !== "all" ? "text-foreground" : "text-muted-foreground",
+                        )}
+                    >
+                        <option value="all">전체</option>
+                        <option value="scheduled">예정</option>
+                        <option value="done">완료</option>
+                    </select>
                     <ChevronDown
                         size={12}
                         className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"

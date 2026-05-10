@@ -207,7 +207,14 @@ export function setStoredUser(user: StoredUser): void {
   sessionStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
   localStorage.removeItem(CURRENT_USER_KEY);
 
-  if (user.workspace_id) {
+  const hasSelectedWorkspace =
+    readPositiveNumber(sessionStorage.getItem(WORKSPACE_ID_KEY)) ??
+    readPositiveNumber(sessionStorage.getItem(LEGACY_WORKSPACE_ID_KEY)) ??
+    readPositiveNumber(localStorage.getItem(WORKSPACE_ID_KEY)) ??
+    readPositiveNumber(localStorage.getItem(LEGACY_WORKSPACE_ID_KEY));
+
+  // 이미 사용자가 선택한 워크스페이스가 있으면 토큰/유저 기본값으로 덮어쓰지 않는다.
+  if (!hasSelectedWorkspace && user.workspace_id) {
     setCurrentWorkspaceId(user.workspace_id);
   }
 }
@@ -218,20 +225,13 @@ function readPositiveNumber(value: string | null): number | null {
 }
 
 export function getCurrentWorkspaceId(): number {
-  const stored = readPositiveNumber(sessionStorage.getItem(WORKSPACE_ID_KEY));
-  if (stored) return stored;
-
-  const legacy = readPositiveNumber(
-    sessionStorage.getItem(LEGACY_WORKSPACE_ID_KEY) ??
+  const stored = readPositiveNumber(
+    sessionStorage.getItem(WORKSPACE_ID_KEY) ??
+      sessionStorage.getItem(LEGACY_WORKSPACE_ID_KEY) ??
       localStorage.getItem(WORKSPACE_ID_KEY) ??
       localStorage.getItem(LEGACY_WORKSPACE_ID_KEY)
   );
-  if (legacy) {
-    setCurrentWorkspaceId(legacy);
-    localStorage.removeItem(WORKSPACE_ID_KEY);
-    localStorage.removeItem(LEGACY_WORKSPACE_ID_KEY);
-    return legacy;
-  }
+  if (stored) return stored;
 
   const userWorkspaceId = getStoredUser()?.workspace_id;
   if (userWorkspaceId) {
@@ -246,8 +246,8 @@ export function setCurrentWorkspaceId(workspaceId: number): void {
   if (!Number.isFinite(workspaceId) || workspaceId <= 0) return;
   sessionStorage.setItem(WORKSPACE_ID_KEY, String(workspaceId));
   sessionStorage.setItem(LEGACY_WORKSPACE_ID_KEY, String(workspaceId));
-  localStorage.removeItem(WORKSPACE_ID_KEY);
-  localStorage.removeItem(LEGACY_WORKSPACE_ID_KEY);
+  localStorage.setItem(WORKSPACE_ID_KEY, String(workspaceId));
+  localStorage.setItem(LEGACY_WORKSPACE_ID_KEY, String(workspaceId));
 }
 
 function decodeJwtPayload(token: string): Record<string, unknown> | null {

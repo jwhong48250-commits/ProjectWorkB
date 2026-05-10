@@ -5,8 +5,10 @@ import {
   Sparkles, Loader2, Trash2, CheckCircle2, Clock3,
   Ban, Circle, Pencil, RefreshCw, GripVertical,
   LayoutList, CalendarDays, CheckSquare, Square, X,
+  AlertTriangle,
 } from 'lucide-react'
 import clsx from 'clsx'
+import DatePicker from '../../components/ui/DatePicker'
 import { getCurrentWorkspaceId } from '../../api/client'
 import {
   getWbs, generateWbs, createEpic, createTask,
@@ -25,20 +27,78 @@ import {
 import { getIntegrations, type IntegrationItem } from '../../api/integrations'
 import type { WbsEpic, WbsTask, WbsStatus, WbsPriority } from '../../types/wbs'
 
+/** Reports 회의록 PDF 툴바와 동일한 보조 버튼 색·호버 (border + text-foreground + hover:bg-muted) */
+function wbsToolBtnOutline(...extra: clsx.Argument[]) {
+  return clsx(
+    'inline-flex items-center justify-center gap-1 h-7 px-2.5 rounded border border-border text-mini transition-colors',
+    'text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40',
+    ...extra,
+  )
+}
+
+function wbsToolBtnPrimary(...extra: clsx.Argument[]) {
+  return clsx(
+    'inline-flex items-center justify-center gap-1 h-7 px-2.5 rounded border border-accent bg-accent text-mini font-medium text-accent-foreground transition-colors',
+    'hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40',
+    ...extra,
+  )
+}
+
+/** 자동 생성 에픽 기본 제목(회의 액션 아이템) 안내 — WBS 테이블·간트 상단 */
+function WbsEpicTitleNotice() {
+  return (
+    <div className="flex min-w-0 items-start gap-2 rounded-lg border border-amber-200/70 bg-amber-50/50 px-3 py-2 dark:border-amber-900/45 dark:bg-amber-950/25">
+      <AlertTriangle size={13} className="mt-0.5 shrink-0 text-amber-700 dark:text-amber-400" aria-hidden />
+      <p className="text-mini leading-relaxed text-amber-950 dark:text-amber-100/90">
+        WBS를 만들 때 에픽 이름이 <strong className="font-semibold">회의 액션 아이템</strong>처럼 기본 문구로 붙을 수 있습니다.
+        에픽 제목을 클릭하면 언제든지 바꿀 수 있으니, JIRA·Slack 등에 올라갈 이름을 원하는 대로 맞춰 주세요.
+      </p>
+    </div>
+  )
+}
+
 // ─── 상수 ────────────────────────────────────────────────────────────────────
 
 const PRIORITY_MAP: Record<WbsPriority, { label: string; cls: string }> = {
-  urgent: { label: '긴급', cls: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
-  high:   { label: '높음', cls: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' },
-  medium: { label: '보통', cls: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' },
-  low:    { label: '낮음', cls: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
+  urgent: {
+    label: '긴급',
+    cls: 'border border-red-200/80 bg-red-50/90 text-red-900 dark:border-red-900/55 dark:bg-red-950/40 dark:text-red-300',
+  },
+  high: {
+    label: '높음',
+    cls: 'border border-orange-200/80 bg-orange-50/90 text-orange-950 dark:border-orange-900/50 dark:bg-orange-950/40 dark:text-orange-300',
+  },
+  medium: {
+    label: '보통',
+    cls: 'border border-amber-200/80 bg-amber-50/85 text-amber-950 dark:border-amber-900/45 dark:bg-amber-950/35 dark:text-amber-200',
+  },
+  low: {
+    label: '낮음',
+    cls: 'border border-emerald-200/80 bg-emerald-50/90 text-emerald-950 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300',
+  },
 }
 
 const STATUS_MAP: Record<WbsStatus, { label: string; cls: string; icon: React.ReactNode }> = {
-  todo:       { label: '할 일',   cls: 'bg-muted text-muted-foreground', icon: <Circle size={10} /> },
-  inprogress: { label: '진행 중', cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300', icon: <Clock3 size={10} /> },
-  done:       { label: '완료',    cls: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300', icon: <CheckCircle2 size={10} /> },
-  blocked:    { label: '블록',    cls: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300', icon: <Ban size={10} /> },
+  todo: {
+    label: '할 일',
+    cls: 'border border-border bg-muted/70 text-muted-foreground dark:bg-muted/50',
+    icon: <Circle size={10} className="shrink-0 opacity-80" />,
+  },
+  inprogress: {
+    label: '진행 중',
+    cls: 'border border-blue-200/90 bg-blue-50/90 text-blue-950 dark:border-blue-800/45 dark:bg-blue-950/40 dark:text-blue-300',
+    icon: <Clock3 size={10} className="shrink-0 opacity-85" />,
+  },
+  done: {
+    label: '완료',
+    cls: 'border border-emerald-200/90 bg-emerald-50/90 text-emerald-950 dark:border-emerald-800/45 dark:bg-emerald-950/40 dark:text-emerald-300',
+    icon: <CheckCircle2 size={10} className="shrink-0 opacity-85" />,
+  },
+  blocked: {
+    label: '블록',
+    cls: 'border border-red-200/90 bg-red-50/90 text-red-950 dark:border-red-800/45 dark:bg-red-950/40 dark:text-red-300',
+    icon: <Ban size={10} className="shrink-0 opacity-85" />,
+  },
 }
 
 const STATUS_COLOR: Record<WbsStatus, string> = {
@@ -50,12 +110,18 @@ const STATUS_COLOR: Record<WbsStatus, string> = {
 function StatusSelect({ status, onChange }: { status: WbsStatus; onChange: (s: WbsStatus) => void }) {
   const { label, cls, icon } = STATUS_MAP[status] ?? STATUS_MAP.todo
   return (
-    <div className="relative inline-flex items-center">
-      <span className={clsx('inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full text-micro font-semibold whitespace-nowrap', cls)}>
-        {icon}{label}
+    <div className="relative inline-flex min-w-[6.5rem] max-w-full items-center justify-center">
+      <span
+        className={clsx(
+          'inline-flex min-h-[1.625rem] items-center justify-center gap-1.5 rounded-full px-2 py-0.5 text-micro font-medium whitespace-nowrap',
+          cls,
+        )}
+      >
+        {icon}
+        {label}
       </span>
       <select value={status} onChange={(e) => onChange(e.target.value as WbsStatus)}
-        className="absolute inset-0 opacity-0 cursor-pointer w-full">
+        className="absolute inset-0 cursor-pointer opacity-0">
         {Object.entries(STATUS_MAP).map(([val, { label: l }]) => (
           <option key={val} value={val}>{l}</option>
         ))}
@@ -88,13 +154,13 @@ function InlineText({ value, onSave, className, placeholder = '—' }: {
           if (e.key === 'Enter') { onSave(draft); setEditing(false) }
           if (e.key === 'Escape') { setDraft(value); setEditing(false) }
         }}
-        className={clsx('bg-transparent outline-none border-b border-accent w-full', className)}
+        className={clsx('min-w-0 max-w-full border-b border-accent bg-transparent outline-none', className)}
       />
     )
   }
   return (
     <span onClick={() => { setDraft(value); setEditing(true) }}
-      className={clsx('cursor-pointer hover:text-accent transition-colors group/text', className)}>
+      className={clsx('group/text cursor-pointer transition-colors hover:text-accent', className)}>
       {value || <span className="text-muted-foreground">{placeholder}</span>}
       <Pencil size={10} className="inline ml-1 opacity-0 group-hover/text:opacity-40" />
     </span>
@@ -337,7 +403,7 @@ function PreviewModal({
         {/* 푸터 */}
         <div className="px-6 py-4 border-t border-border flex justify-end gap-2">
           <button onClick={onClose} disabled={loading}
-            className="h-8 px-4 rounded-lg border border-border text-sm text-muted-foreground hover:bg-muted/50 disabled:opacity-50">
+            className="h-8 px-4 rounded-lg border border-border text-sm text-foreground transition-colors hover:bg-muted disabled:opacity-50">
             취소
           </button>
           <button onClick={() => onConfirm([...extraServices])} disabled={loading}
@@ -476,7 +542,7 @@ function NextMeetingModal({
                         'py-2 rounded-lg border text-sm transition-colors',
                         duration === min
                           ? 'border-accent bg-accent/10 text-accent font-medium'
-                          : 'border-border text-muted-foreground hover:bg-muted/50',
+                          : 'border-border text-foreground hover:bg-muted',
                       )}
                     >
                       {min}분
@@ -511,7 +577,7 @@ function NextMeetingModal({
                           'w-full flex items-center gap-3 px-4 py-3 rounded-lg border text-left transition-all',
                           isSelected
                             ? 'border-accent bg-accent/10 ring-1 ring-accent/30'
-                            : 'border-border hover:bg-muted/30',
+                            : 'border-border hover:bg-muted',
                         )}
                       >
                         <div className={clsx(
@@ -552,7 +618,7 @@ function NextMeetingModal({
           {step === 'slots' && (
             <button
               onClick={() => { setStep('setup'); setError(null) }}
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors mr-auto"
+              className="text-sm text-foreground transition-colors hover:opacity-80 mr-auto"
             >
               ← 다시
             </button>
@@ -560,7 +626,7 @@ function NextMeetingModal({
           <div className={clsx('flex gap-2', step === 'setup' && 'ml-auto')}>
             <button
               onClick={onClose}
-              className="h-8 px-4 rounded-lg border border-border text-sm text-muted-foreground hover:bg-muted/50 transition-colors"
+              className="h-8 px-4 rounded-lg border border-border text-sm text-foreground transition-colors hover:bg-muted"
             >
               취소
             </button>
@@ -671,6 +737,9 @@ export default function WbsPage() {
   const [slackExporting, setSlackExporting]   = useState(false)
   const [calendarExporting, setCalendarExporting] = useState(false)
   const exportMenuRef = useRef<HTMLDivElement>(null)
+  /** 에픽/태스크 추가 API 중복 호출 방지 (Enter 연타·IME·키 반복) */
+  const epicAddInFlightRef = useRef(false)
+  const taskAddInFlightRef = useRef(false)
 
   // ── 다음 회의 예약 모달
   const [nextMeetingOpen, setNextMeetingOpen] = useState(false)
@@ -758,35 +827,80 @@ export default function WbsPage() {
   }
 
   async function handleAddEpic() {
-    if (!epicInput.trim()) { setAddingEpic(false); return }
-    const d = await createEpic(meetingId!, workspaceId, epicInput.trim(), epics.length)
-    setEpics((p) => [...p, { id: String(d.id), title: d.title, orderIndex: d.order_index, progress: 0, tasks: [] }])
-    setEpicInput(''); setAddingEpic(false)
+    const title = epicInput.trim()
+    if (!title) {
+      setAddingEpic(false)
+      return
+    }
+    if (epicAddInFlightRef.current) return
+    epicAddInFlightRef.current = true
+    try {
+      const d = await createEpic(meetingId!, workspaceId, title, epics.length)
+      setEpics((p) => [...p, { id: String(d.id), title: d.title, orderIndex: d.order_index, progress: 0, tasks: [] }])
+      setEpicInput('')
+      setAddingEpic(false)
+    } finally {
+      epicAddInFlightRef.current = false
+    }
+  }
+
+  function onEpicInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Escape') {
+      setAddingEpic(false)
+      setEpicInput('')
+      return
+    }
+    if (e.key !== 'Enter') return
+    if (e.repeat || e.nativeEvent.isComposing) return
+    e.preventDefault()
+    void handleAddEpic()
   }
 
   async function handleAddTask(epicId: string) {
-    if (!taskInput.trim()) { setAddingTask(null); return }
-    const epic = epics.find(e => e.id === epicId)
-    const d = await createTask(meetingId!, workspaceId, parseInt(epicId), taskInput.trim())
-    setEpics((p) => p.map((e) => {
-      if (e.id !== epicId) return e
-      const newTask = {
-        id: String(d.id), epicId, title: d.title,
-        assigneeName: d.assignee_name ?? undefined,
-        priority: toPriority(d.priority),
-        urgency: d.urgency ?? undefined,
-        status: toStatus(d.status),
-        dueDate: d.due_date ?? undefined,
-        progress: d.progress,
-        orderIndex: epic?.tasks.length ?? 0,
-      }
-      const updatedTasks = [...e.tasks, newTask]
-      const progress = updatedTasks.length > 0
-        ? Math.round(updatedTasks.reduce((s, t) => s + t.progress, 0) / updatedTasks.length)
-        : 0
-      return { ...e, tasks: updatedTasks, progress }
-    }))
-    setTaskInput(''); setAddingTask(null)
+    const taskTitle = taskInput.trim()
+    if (!taskTitle) {
+      setAddingTask(null)
+      return
+    }
+    if (taskAddInFlightRef.current) return
+    taskAddInFlightRef.current = true
+    try {
+      const epic = epics.find(e => e.id === epicId)
+      const d = await createTask(meetingId!, workspaceId, parseInt(epicId), taskTitle)
+      setEpics((p) => p.map((e) => {
+        if (e.id !== epicId) return e
+        const newTask = {
+          id: String(d.id), epicId, title: d.title,
+          assigneeName: d.assignee_name ?? undefined,
+          priority: toPriority(d.priority),
+          urgency: d.urgency ?? undefined,
+          status: toStatus(d.status),
+          dueDate: d.due_date ?? undefined,
+          progress: d.progress,
+          orderIndex: epic?.tasks.length ?? 0,
+        }
+        const updatedTasks = [...e.tasks, newTask]
+        const progress = updatedTasks.length > 0
+          ? Math.round(updatedTasks.reduce((s, t) => s + t.progress, 0) / updatedTasks.length)
+          : 0
+        return { ...e, tasks: updatedTasks, progress }
+      }))
+      setTaskInput('')
+      setAddingTask(null)
+    } finally {
+      taskAddInFlightRef.current = false
+    }
+  }
+
+  function onTaskInputKeyDown(epicId: string, e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Escape') {
+      setAddingTask(null)
+      return
+    }
+    if (e.key !== 'Enter') return
+    if (e.repeat || e.nativeEvent.isComposing) return
+    e.preventDefault()
+    void handleAddTask(epicId)
   }
 
   async function handleDeleteEpic(epicId: string) {
@@ -1141,14 +1255,14 @@ export default function WbsPage() {
             <button
               onClick={() => setViewMode('table')}
               className={clsx('flex items-center gap-1.5 h-8 px-3 text-sm transition-colors',
-                viewMode === 'table' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-muted/50')}
+                viewMode === 'table' ? 'bg-accent text-accent-foreground' : 'text-foreground hover:bg-muted')}
             >
               <LayoutList size={13} /> 테이블
             </button>
             <button
               onClick={() => setViewMode('gantt')}
               className={clsx('flex items-center gap-1.5 h-8 px-3 text-sm transition-colors border-l border-border',
-                viewMode === 'gantt' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-muted/50')}
+                viewMode === 'gantt' ? 'bg-accent text-accent-foreground' : 'text-foreground hover:bg-muted')}
             >
               <CalendarDays size={13} /> 간트
             </button>
@@ -1162,7 +1276,7 @@ export default function WbsPage() {
                 'flex items-center gap-1.5 h-8 px-3 rounded-lg border text-sm transition-colors',
                 selectMode
                   ? 'border-accent text-accent bg-accent/10'
-                  : 'border-border text-muted-foreground hover:bg-muted/50',
+                  : 'border-border text-foreground hover:bg-muted',
               )}
             >
               <CheckSquare size={13} />
@@ -1179,7 +1293,7 @@ export default function WbsPage() {
                 'flex items-center gap-1.5 h-8 px-3 rounded-lg border text-sm transition-colors disabled:opacity-50',
                 exportMenuOpen
                   ? 'border-accent text-accent bg-accent/10'
-                  : 'border-border text-muted-foreground hover:bg-muted/50',
+                  : 'border-border text-foreground hover:bg-muted',
               )}
             >
               <ExternalLink size={13} />
@@ -1307,71 +1421,148 @@ export default function WbsPage() {
             )}
           </div>
 
-          {/* JIRA 동기화 */}
-          <div className="flex flex-col items-end gap-1">
+          {/* JIRA 동기화 — 버튼은 헤더 다른 액션과 동일 높이·스타일, 동기화 시각은 옆에 한 줄 */}
+          <div className="flex shrink-0 items-center gap-2">
             <button
+              type="button"
               onClick={handleJiraSync}
               disabled={jiraSyncing || epics.length === 0 || !jiraConnected}
-              title={!jiraConnected ? 'JIRA 연동이 필요합니다' : undefined}
-              className="flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border text-sm hover:bg-muted/50 transition-colors disabled:opacity-50"
+              title={!jiraConnected ? 'JIRA 연동이 필요합니다' : lastSyncAt ? formatSyncTime(lastSyncAt) : undefined}
+              className={clsx(
+                'flex h-8 items-center gap-1.5 rounded-lg border px-3 text-sm transition-colors',
+                'border-border text-foreground hover:bg-muted',
+                'disabled:cursor-not-allowed disabled:opacity-50',
+              )}
             >
-              {jiraSyncing ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+              {jiraSyncing ? <Loader2 size={13} className="animate-spin shrink-0" /> : <RefreshCw size={13} className="shrink-0" />}
               JIRA 동기화
             </button>
-            {lastSyncAt && (
-              <span className="text-micro text-muted-foreground">
+            {lastSyncAt ? (
+              <span
+                className="max-w-[6.5rem] truncate text-micro leading-tight text-muted-foreground sm:max-w-none sm:whitespace-nowrap"
+                title={formatSyncTime(lastSyncAt)}
+              >
                 {formatSyncTime(lastSyncAt)}
               </span>
-            )}
+            ) : null}
           </div>
-
-          {/* 에픽 추가 */}
-          <button
-            onClick={() => { setAddingEpic(true); setEpicInput('') }}
-            className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-accent text-accent-foreground text-sm font-medium hover:bg-accent/90 transition-colors"
-          >
-            <Plus size={13} /> 에픽 추가
-          </button>
         </div>
       </div>
 
       {/* 빈 상태 */}
       {epics.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-24 gap-3 rounded-xl border border-dashed border-border">
+        <div className="flex flex-col items-center justify-center py-24 gap-3 rounded-xl border border-dashed border-border px-4">
           <Sparkles size={28} className="text-muted-foreground/40" />
           <p className="text-sm text-muted-foreground">회의 종료 후 WBS가 자동으로 생성됩니다.</p>
           <p className="text-mini text-muted-foreground/60">파이프라인이 완료되면 이 페이지에서 확인할 수 있습니다.</p>
+          {addingEpic ? (
+            <div className="mt-2 w-full max-w-md flex items-center gap-2 rounded-lg border border-dashed border-accent/40 px-4 py-3">
+              <input
+                autoFocus
+                value={epicInput}
+                onChange={(e) => setEpicInput(e.target.value)}
+                onKeyDown={onEpicInputKeyDown}
+                placeholder="에픽 제목 입력 후 Enter"
+                className="flex-1 text-sm font-semibold bg-transparent outline-none placeholder:text-muted-foreground"
+              />
+              <button type="button" onClick={handleAddEpic} className="text-mini text-accent shrink-0">추가</button>
+              <button type="button" onClick={() => { setAddingEpic(false); setEpicInput('') }} className="text-mini text-foreground shrink-0">취소</button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => { setAddingEpic(true); setEpicInput('') }}
+              className="mt-1 flex items-center gap-1 text-mini text-foreground hover:text-accent transition-colors"
+            >
+              <Plus size={12} /> 에픽 추가
+            </button>
+          )}
         </div>
       ) : viewMode === 'gantt' ? (
-        <GanttView epics={epics} />
+        <>
+          <div className="mb-4">
+            <WbsEpicTitleNotice />
+          </div>
+          <GanttView epics={epics} />
+          <div className="mt-4 rounded-xl border border-border overflow-hidden">
+            <div className="border-t border-border bg-muted/10 px-4 py-2">
+              {addingEpic ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    autoFocus
+                    value={epicInput}
+                    onChange={(e) => setEpicInput(e.target.value)}
+                    onKeyDown={onEpicInputKeyDown}
+                    placeholder="에픽 제목 입력 후 Enter"
+                    className="flex-1 text-sm font-semibold bg-transparent outline-none placeholder:text-muted-foreground"
+                  />
+                  <button type="button" onClick={handleAddEpic} className="text-mini text-accent">추가</button>
+                  <button type="button" onClick={() => { setAddingEpic(false); setEpicInput('') }} className="text-mini text-foreground">취소</button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => { setAddingEpic(true); setEpicInput('') }}
+                  className="flex items-center gap-1 text-mini text-foreground hover:text-accent transition-colors"
+                >
+                  <Plus size={12} /> 에픽 추가
+                </button>
+              )}
+            </div>
+          </div>
+        </>
       ) : (
         <>
-          {/* AI 배너 */}
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-accent/5 border border-accent/20 mb-5">
-            <Sparkles size={13} className="text-accent shrink-0" />
-            <p className="text-mini text-accent flex-1">
-              셀을 클릭하면 바로 편집 · 에픽 행을 드래그하면 순서 변경 · 태스크를 다른 에픽 위로 드래그하면 이동
-            </p>
-            <button onClick={handleGenerate} disabled={generating}
-              className="text-mini text-accent hover:underline disabled:opacity-60 shrink-0">
+          {/* 안내 배너 + 재생성 (분리) */}
+          <div className="mb-5 flex flex-col gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-accent/20 bg-accent/5 px-3 py-2">
+              <Sparkles size={13} className="shrink-0 text-accent" />
+              <p className="text-mini flex-1 text-accent">
+                셀을 클릭하면 바로 편집 · 에픽 행을 드래그하면 순서 변경 · 태스크를 다른 에픽 위로 드래그하면 이동
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={generating}
+              className={clsx(
+                'flex h-8 shrink-0 items-center gap-1.5 self-end rounded-lg border border-border px-3 text-sm transition-colors sm:self-center',
+                'text-foreground hover:bg-muted',
+                'disabled:cursor-not-allowed disabled:opacity-40',
+              )}
+            >
+              {generating ? <Loader2 size={13} className="animate-spin shrink-0" /> : <RefreshCw size={13} className="shrink-0" />}
               {generating ? '생성 중...' : '재생성'}
             </button>
+            </div>
+            <WbsEpicTitleNotice />
           </div>
 
           {/* 테이블 */}
           <div className="rounded-xl border border-border overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-sm">
-                <thead className="sticky top-0 z-10 bg-card border-b border-border">
+              <table className="w-full min-w-[52rem] table-fixed border-collapse text-sm align-middle">
+                <colgroup>
+                  {selectMode && <col className="w-9" />}
+                  <col style={{ width: selectMode ? '34%' : '36%' }} />
+                  <col style={{ width: '7.5rem' }} />
+                  <col style={{ width: '5.25rem' }} />
+                  <col style={{ width: '6.75rem' }} />
+                  <col style={{ width: '6.25rem' }} />
+                  <col style={{ width: '5.75rem' }} />
+                  <col className="w-10" />
+                </colgroup>
+                <thead className="sticky top-0 z-10 border-b border-border">
                   <tr>
-                    {selectMode && <th className="w-8 px-2" />}
-                    <th className="text-left px-4 py-3 text-micro font-semibold text-muted-foreground uppercase tracking-wide">작업명</th>
-                    <th className="text-left px-4 py-3 text-micro font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap min-w-[120px]">담당자</th>
-                    <th className="text-left px-4 py-3 text-micro font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap min-w-[80px]">우선순위</th>
-                    <th className="text-left px-4 py-3 text-micro font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap min-w-[110px]">상태</th>
-                    <th className="text-left px-4 py-3 text-micro font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap min-w-[90px]">기한</th>
-                    <th className="text-left px-4 py-3 text-micro font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap min-w-[70px]">진행률</th>
-                    <th className="w-10" />
+                    {selectMode && <th className="w-9 bg-card px-2 text-center align-middle" />}
+                    <th className="min-w-0 bg-card px-4 py-3 text-left align-middle text-micro font-semibold uppercase tracking-wide text-muted-foreground">작업명</th>
+                    <th className="bg-card px-3 py-3 text-center align-middle text-micro font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">담당자</th>
+                    <th className="bg-card px-2 py-3 text-center align-middle text-micro font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">우선순위</th>
+                    <th className="bg-card px-2 py-3 text-center align-middle text-micro font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">상태</th>
+                    <th className="bg-card px-2 py-3 text-center align-middle text-micro font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">기한</th>
+                    <th className="bg-card px-2 py-3 text-center align-middle text-micro font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">진행률</th>
+                    <th className="w-10 bg-card p-0 align-middle" aria-hidden />
                   </tr>
                 </thead>
                 <tbody>
@@ -1394,8 +1585,9 @@ export default function WbsPage() {
                         )}
                       >
                         {selectMode && (
-                          <td className="px-2 py-2.5 text-center">
+                          <td className="px-2 py-2.5 text-center align-middle">
                             <button
+                              type="button"
                               onClick={() => toggleSelectEpic(epic.id)}
                               className="text-muted-foreground hover:text-accent transition-colors"
                             >
@@ -1408,28 +1600,28 @@ export default function WbsPage() {
                             </button>
                           </td>
                         )}
-                        <td className="px-4 py-2.5">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <GripVertical size={13} className="shrink-0 text-muted-foreground/40 cursor-grab group-hover:text-muted-foreground/70 transition-colors" />
-                            <button onClick={() => toggleEpic(epic.id)} className="shrink-0 text-muted-foreground hover:text-foreground transition-colors">
+                        <td className="min-w-0 px-4 py-2.5 align-middle">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <GripVertical size={13} className="shrink-0 cursor-grab text-muted-foreground/40 transition-colors group-hover:text-muted-foreground/70" />
+                            <button type="button" onClick={() => toggleEpic(epic.id)} className="shrink-0 text-muted-foreground hover:text-foreground transition-colors">
                               {collapsed[epic.id] ? <ChevronRight size={15} /> : <ChevronDown size={15} />}
                             </button>
-                            <InlineText value={epic.title} onSave={(v) => saveEpicTitle(epic.id, v)} className="font-semibold text-foreground" />
-                            <span className="shrink-0 text-micro text-muted-foreground px-1.5 py-0.5 rounded-full bg-muted">{epic.tasks.length}개</span>
+                            <InlineText value={epic.title} onSave={(v) => saveEpicTitle(epic.id, v)} className="block min-w-0 flex-1 truncate font-semibold text-foreground" />
+                            <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-micro text-muted-foreground tabular-nums">{epic.tasks.length}개</span>
                           </div>
                         </td>
-                        <td className="px-4 py-2.5" colSpan={4}>
-                          <div className="flex items-center gap-2">
-                            <div className="w-20 h-1.5 rounded-full bg-border overflow-hidden">
+                        <td className="min-w-0 px-3 py-2.5 text-center align-middle" colSpan={4}>
+                          <div className="flex max-w-full items-center justify-center gap-2">
+                            <div className="h-1.5 min-w-0 flex-1 max-w-[12rem] overflow-hidden rounded-full bg-border">
                               <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${epic.progress}%` }} />
                             </div>
-                            <span className="text-micro text-muted-foreground">{epic.progress}%</span>
+                            <span className="shrink-0 tabular-nums text-micro text-muted-foreground">{epic.progress}%</span>
                           </div>
                         </td>
-                        <td className="px-4 py-2.5" />
-                        <td className="px-4 py-2.5 text-right">
-                          <button onClick={() => handleDeleteEpic(epic.id)}
-                            className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-red-500 transition-all">
+                        <td className="w-10 p-0 align-middle" aria-hidden />
+                        <td className="px-1 py-2.5 text-right align-middle">
+                          <button type="button" onClick={() => handleDeleteEpic(epic.id)}
+                            className="inline-flex rounded p-1 text-muted-foreground opacity-0 transition-all hover:bg-destructive/10 hover:text-red-500 group-hover:opacity-100">
                             <Trash2 size={13} />
                           </button>
                         </td>
@@ -1450,8 +1642,8 @@ export default function WbsPage() {
                         >
                           {/* 선택 체크박스 */}
                           {selectMode && (
-                            <td className="px-2 py-2.5 text-center">
-                              <button onClick={() => toggleSelectTask(epic.id, task.id)}
+                            <td className="px-2 py-2.5 text-center align-middle">
+                              <button type="button" onClick={() => toggleSelectTask(epic.id, task.id)}
                                 className="text-muted-foreground hover:text-accent transition-colors">
                                 {selectedTasks.has(task.id)
                                   ? <CheckSquare size={14} className="text-accent" />
@@ -1462,14 +1654,14 @@ export default function WbsPage() {
                           )}
 
                           {/* 작업명 + 내용 인라인 */}
-                          <td className="px-4 py-2 pl-10">
-                            <div className="flex items-start gap-1.5 min-w-0">
-                              <GripVertical size={12} className="shrink-0 mt-1 text-muted-foreground/30 group-hover:text-muted-foreground/60 transition-colors" />
-                              <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                          <td className="min-w-0 px-4 py-2.5 pl-10 align-top">
+                            <div className="flex min-w-0 items-start gap-1.5">
+                              <GripVertical size={12} className="mt-1 shrink-0 text-muted-foreground/30 transition-colors group-hover:text-muted-foreground/60" />
+                              <div className="min-w-0 flex-1 space-y-1">
                                 <InlineText
                                   value={task.title}
                                   onSave={(v) => { if (!v.trim()) return; updateTask(epic.id, task.id, { title: v }); saveTaskField(epic.id, task.id, { title: v }) }}
-                                  className="text-sm text-foreground"
+                                  className="block line-clamp-2 break-words text-sm text-foreground"
                                 />
                                 {expandedTasks.has(task.id) ? (
                                   <textarea
@@ -1485,14 +1677,15 @@ export default function WbsPage() {
                                     }}
                                     onKeyDown={(e) => { if (e.key === 'Escape') e.currentTarget.blur() }}
                                     rows={2}
-                                    className="w-full text-mini text-muted-foreground bg-muted/40 rounded px-1.5 py-1 outline-none resize-none border border-accent/40 placeholder:text-muted-foreground/40 leading-relaxed"
+                                    className="w-full min-w-0 resize-none rounded border border-accent/40 bg-muted/40 px-1.5 py-1 text-mini leading-relaxed text-muted-foreground outline-none placeholder:text-muted-foreground/40"
                                     placeholder="내용을 입력하세요..."
                                   />
                                 ) : (
                                   <button
+                                    type="button"
                                     onClick={() => setExpandedTasks(prev => new Set(prev).add(task.id))}
                                     className={clsx(
-                                      'text-left text-mini leading-relaxed transition-colors cursor-text',
+                                      'max-w-full cursor-text text-left text-mini leading-relaxed transition-colors break-words',
                                       task.content
                                         ? 'text-muted-foreground/70 hover:text-muted-foreground'
                                         : 'text-muted-foreground/0 group-hover:text-muted-foreground/30 italic',
@@ -1501,38 +1694,50 @@ export default function WbsPage() {
                                     {task.content ?? '메모 추가...'}
                                   </button>
                                 )}
+                                {(task.urgency === 'urgent' || task.urgency === 'low' || task.jiraIssueId) && (
+                                  <div className="flex flex-wrap items-center gap-1">
+                                    {task.urgency === 'urgent' && (
+                                      <span className="rounded bg-red-100 px-1 py-0.5 text-micro font-semibold text-red-600 dark:bg-red-900/30 dark:text-red-400">긴급</span>
+                                    )}
+                                    {task.urgency === 'low' && (
+                                      <span className="rounded bg-green-100 px-1 py-0.5 text-micro text-green-600 dark:bg-green-900/30 dark:text-green-400">여유</span>
+                                    )}
+                                    {task.jiraIssueId && (
+                                      <span className="max-w-full truncate rounded bg-blue-100 px-1 py-0.5 font-mono text-micro text-blue-600 dark:bg-blue-900/30 dark:text-blue-400" title={task.jiraIssueId}>
+                                        {task.jiraIssueId}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
                               </div>
-                              {task.urgency === 'urgent' && (
-                                <span className="shrink-0 text-micro px-1 py-0.5 rounded bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 font-semibold">긴급</span>
-                              )}
-                              {task.urgency === 'low' && (
-                                <span className="shrink-0 text-micro px-1 py-0.5 rounded bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400">여유</span>
-                              )}
-                              {task.jiraIssueId && (
-                                <span className="shrink-0 text-micro px-1 py-0.5 rounded bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 font-mono">
-                                  {task.jiraIssueId}
-                                </span>
-                              )}
                             </div>
                           </td>
 
                           {/* 담당자 */}
-                          <td className="px-4 py-2.5">
-                            <div className="flex items-center gap-1.5">
-                              <Avatar name={task.assigneeName} />
-                              <InlineText
-                                value={task.assigneeName ?? ''}
-                                onSave={(v) => { updateTask(epic.id, task.id, { assigneeName: v || undefined }); saveTaskField(epic.id, task.id, { assignee_name: v || null }) }}
-                                className="text-mini text-foreground"
-                                placeholder="담당자 없음"
-                              />
+                          <td className="min-w-0 px-3 py-2.5 text-center align-middle">
+                            <div className="flex w-full min-w-0 justify-center">
+                              <div className="inline-flex min-w-0 max-w-full items-center gap-1.5">
+                                <Avatar name={task.assigneeName} />
+                                <InlineText
+                                  value={task.assigneeName ?? ''}
+                                  onSave={(v) => { updateTask(epic.id, task.id, { assigneeName: v || undefined }); saveTaskField(epic.id, task.id, { assignee_name: v || null }) }}
+                                  className="min-w-0 truncate text-mini text-foreground"
+                                  placeholder="담당자 없음"
+                                />
+                              </div>
                             </div>
                           </td>
 
                           {/* 우선순위 */}
-                          <td className="px-4 py-2.5">
-                            <div className="relative inline-flex items-center">
-                              <span className={clsx('inline-flex items-center px-2 py-0.5 rounded-full text-micro font-semibold whitespace-nowrap', PRIORITY_MAP[task.priority]?.cls)}>
+                          <td className="min-w-0 px-2 py-2.5 text-center align-middle">
+                            <div className="flex w-full min-w-0 justify-center">
+                            <div className="relative inline-flex min-w-[4.5rem] max-w-full items-center justify-center">
+                              <span
+                                className={clsx(
+                                  'inline-flex min-h-[1.625rem] min-w-[2.75rem] items-center justify-center whitespace-nowrap rounded-full px-2 py-0.5 text-micro font-medium',
+                                  PRIORITY_MAP[task.priority]?.cls,
+                                )}
+                              >
                                 {PRIORITY_MAP[task.priority]?.label}
                               </span>
                               <select
@@ -1542,63 +1747,93 @@ export default function WbsPage() {
                                   updateTask(epic.id, task.id, { priority: p })
                                   saveTaskField(epic.id, task.id, { priority: p === 'urgent' ? 'high' : p })
                                 }}
-                                className="absolute inset-0 opacity-0 cursor-pointer w-full"
+                                className="absolute inset-0 cursor-pointer opacity-0"
                               >
                                 {Object.entries(PRIORITY_MAP).map(([val, { label }]) => (
                                   <option key={val} value={val}>{label}</option>
                                 ))}
                               </select>
                             </div>
+                            </div>
                           </td>
 
                           {/* 상태 */}
-                          <td className="px-4 py-2.5">
-                            <StatusSelect
-                              status={task.status}
-                              onChange={(s) => { updateTask(epic.id, task.id, { status: s }); saveTaskField(epic.id, task.id, { status: fromStatus(s) }) }}
-                            />
+                          <td className="min-w-0 px-2 py-2.5 text-center align-middle">
+                            <div className="flex w-full min-w-0 justify-center">
+                              <StatusSelect
+                                status={task.status}
+                                onChange={(s) => { updateTask(epic.id, task.id, { status: s }); saveTaskField(epic.id, task.id, { status: fromStatus(s) }) }}
+                              />
+                            </div>
                           </td>
 
                           {/* 기한 */}
-                          <td className="px-4 py-2.5">
-                            <input
-                              type="date"
-                              value={task.dueDate ?? ''}
-                              onChange={(e) => {
-                                const v = e.target.value || undefined
-                                updateTask(epic.id, task.id, { dueDate: v })
-                                saveTaskField(epic.id, task.id, { due_date: v ?? null })
-                              }}
-                              className={clsx(
-                                'text-mini bg-transparent outline-none cursor-pointer w-24',
-                                task.dueDate && new Date(task.dueDate) < new Date() && task.status !== 'done'
-                                  ? 'text-red-500 font-medium'
-                                  : 'text-muted-foreground',
-                              )}
-                            />
+                          <td className="min-w-0 px-2 py-2.5 text-center align-middle">
+                            <div className="flex w-full min-w-0 justify-center">
+                              <div
+                                className={clsx(
+                                  'min-w-0 shrink-0',
+                                  task.dueDate && new Date(task.dueDate) < new Date() && task.status !== 'done'
+                                    ? '[&_button]:font-medium [&_button]:text-red-500 [&_button_span]:text-red-500'
+                                    : '[&_button]:text-muted-foreground [&_button_span]:text-muted-foreground',
+                                )}
+                              >
+                                <DatePicker
+                                  value={task.dueDate ?? ''}
+                                  onChange={(next) => {
+                                    const v = next || undefined
+                                    updateTask(epic.id, task.id, { dueDate: v })
+                                    saveTaskField(epic.id, task.id, { due_date: v ?? null })
+                                  }}
+                                  placeholder="—"
+                                  displayFormat="iso"
+                                  size="compact"
+                                  portal
+                                  triggerFullWidth={false}
+                                />
+                              </div>
+                            </div>
                           </td>
 
-                          {/* 진행률 */}
-                          <td className="px-4 py-2.5">
-                            <div className="flex items-center gap-1">
-                              <input
-                                type="number" min={0} max={100}
-                                value={task.progress}
-                                onChange={(e) => {
-                                  const v = Math.max(0, Math.min(100, parseInt(e.target.value) || 0))
-                                  updateTask(epic.id, task.id, { progress: v })
-                                  saveTaskField(epic.id, task.id, { progress: v })
-                                }}
-                                className="w-10 text-mini text-center bg-transparent outline-none border-b border-transparent hover:border-border focus:border-accent text-muted-foreground"
-                              />
-                              <span className="text-micro text-muted-foreground">%</span>
+                          {/* 진행률: 에픽과 동일한 미니 바 + 기한/DatePicker와 맞는 컴팩트 입력 */}
+                          <td className="min-w-0 px-2 py-2.5 text-center align-middle">
+                            <div className="flex w-full min-w-0 justify-center">
+                            <div className="inline-flex max-w-full min-w-0 items-center gap-1.5">
+                              <div className="h-1 w-[3.25rem] shrink-0 overflow-hidden rounded-full bg-border">
+                                <div
+                                  className="h-full rounded-full bg-accent transition-[width] duration-200 ease-out"
+                                  style={{ width: `${Math.min(100, Math.max(0, task.progress))}%` }}
+                                />
+                              </div>
+                              <div className="flex shrink-0 items-center gap-px">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={100}
+                                  value={task.progress}
+                                  onChange={(e) => {
+                                    const raw = e.target.value
+                                    const v = raw === '' ? 0 : Math.max(0, Math.min(100, parseInt(raw, 10) || 0))
+                                    updateTask(epic.id, task.id, { progress: v })
+                                    saveTaskField(epic.id, task.id, { progress: v })
+                                  }}
+                                  className={clsx(
+                                    'h-7 w-9 min-w-0 rounded-md border border-border bg-background px-0.5 text-center text-mini font-medium tabular-nums text-foreground',
+                                    'outline-none transition-shadow hover:border-border/80',
+                                    'focus:border-accent focus:ring-2 focus:ring-accent/30',
+                                    '[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none',
+                                  )}
+                                />
+                                <span className="text-micro font-medium tabular-nums text-muted-foreground">%</span>
+                              </div>
+                            </div>
                             </div>
                           </td>
 
                           {/* 삭제 */}
-                          <td className="px-4 py-2.5 text-right">
-                            <button onClick={() => handleDeleteTask(epic.id, task.id)}
-                              className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-red-500 transition-all">
+                          <td className="px-1 py-2.5 text-right align-middle">
+                            <button type="button" onClick={() => handleDeleteTask(epic.id, task.id)}
+                              className="inline-flex rounded p-1 text-muted-foreground opacity-0 transition-all hover:bg-destructive/10 hover:text-red-500 group-hover:opacity-100">
                               <Trash2 size={13} />
                             </button>
                           </td>
@@ -1608,26 +1843,22 @@ export default function WbsPage() {
                       {/* 태스크 추가 행 */}
                       {!collapsed[epic.id] && (
                         <tr className="border-b border-border bg-muted/10">
-                          <td colSpan={selectMode ? 8 : 7} className="px-4 py-2 pl-10">
+                          <td colSpan={selectMode ? 8 : 7} className="min-w-0 px-4 py-2 pl-10">
                             {addingTask === epic.id ? (
-                              <div className="flex items-center gap-2">
+                              <div className="flex min-w-0 flex-wrap items-center gap-2">
                                 <input
                                   autoFocus value={taskInput}
                                   onChange={(e) => setTaskInput(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handleAddTask(epic.id)
-                                    if (e.key === 'Escape') setAddingTask(null)
-                                  }}
+                                  onKeyDown={(e) => onTaskInputKeyDown(epic.id, e)}
                                   placeholder="태스크 제목 입력 후 Enter"
-                                  className="flex-1 text-sm bg-transparent outline-none placeholder:text-muted-foreground"
+                                  className="min-w-0 flex-1 text-sm bg-transparent outline-none placeholder:text-muted-foreground"
                                 />
-                                <button onClick={() => handleAddTask(epic.id)} className="text-mini text-accent">추가</button>
-                                <button onClick={() => setAddingTask(null)} className="text-mini text-muted-foreground">취소</button>
+                                <button type="button" onClick={() => handleAddTask(epic.id)} className={wbsToolBtnPrimary()}>추가</button>
+                                <button type="button" onClick={() => setAddingTask(null)} className={wbsToolBtnOutline()}>취소</button>
                               </div>
                             ) : (
-                              <button onClick={() => { setAddingTask(epic.id); setTaskInput('') }}
-                                className="flex items-center gap-1 text-mini text-muted-foreground hover:text-accent transition-colors">
-                                <Plus size={12} /> 태스크 추가
+                              <button type="button" onClick={() => { setAddingTask(epic.id); setTaskInput('') }} className={wbsToolBtnOutline()}>
+                                <Plus size={11} className="shrink-0" /> 태스크 추가
                               </button>
                             )}
                           </td>
@@ -1635,29 +1866,39 @@ export default function WbsPage() {
                       )}
                     </Fragment>
                   ))}
+
+                  {/* 에픽 추가 행 (테이블 맨 아래) */}
+                  <tr className="border-b border-border bg-muted/10">
+                    <td colSpan={selectMode ? 8 : 7} className="min-w-0 px-4 py-2">
+                      {addingEpic ? (
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <input
+                            autoFocus
+                            value={epicInput}
+                            onChange={(e) => setEpicInput(e.target.value)}
+                            onKeyDown={onEpicInputKeyDown}
+                            placeholder="에픽 제목 입력 후 Enter"
+                            className="min-w-0 flex-1 text-sm font-semibold bg-transparent outline-none placeholder:text-muted-foreground"
+                          />
+                          <button type="button" onClick={handleAddEpic} className={wbsToolBtnPrimary()}>추가</button>
+                          <button type="button" onClick={() => { setAddingEpic(false); setEpicInput('') }} className={wbsToolBtnOutline()}>취소</button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => { setAddingEpic(true); setEpicInput('') }}
+                          className={wbsToolBtnOutline()}
+                        >
+                          <Plus size={11} className="shrink-0" /> 에픽 추가
+                        </button>
+                      )}
+                    </td>
+                  </tr>
                 </tbody>
               </table>
             </div>
           </div>
         </>
-      )}
-
-      {/* 에픽 추가 인풋 */}
-      {addingEpic && (
-        <div className="mt-3 rounded-lg border border-dashed border-accent/40 px-4 py-3 flex items-center gap-2">
-          <input
-            autoFocus value={epicInput}
-            onChange={(e) => setEpicInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleAddEpic()
-              if (e.key === 'Escape') setAddingEpic(false)
-            }}
-            placeholder="에픽 제목 입력 후 Enter"
-            className="flex-1 text-sm font-semibold bg-transparent outline-none placeholder:text-muted-foreground"
-          />
-          <button onClick={handleAddEpic} className="text-mini text-accent">추가</button>
-          <button onClick={() => setAddingEpic(false)} className="text-mini text-muted-foreground">취소</button>
-        </div>
       )}
     </div>
   )

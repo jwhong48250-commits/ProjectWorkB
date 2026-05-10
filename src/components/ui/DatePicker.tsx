@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useLayoutEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -7,6 +8,14 @@ interface DatePickerProps {
   onChange: (value: string) => void
   placeholder?: string
   className?: string
+  /** 기본: 로케일(예: 2026. 5. 11.). iso: value 그대로(YYYY-MM-DD) */
+  displayFormat?: 'locale' | 'iso'
+  /** 테이블 등 좁은 영역용 트리거 높이·글자 크기 */
+  size?: 'default' | 'compact'
+  /** true면 달력을 body에 고정 배치(overflow:hidden 조상에서도 보임) */
+  portal?: boolean
+  /** false면 트리거를 내용 너비로(테이블 셀 가운데 정렬 등). 기본 true */
+  triggerFullWidth?: boolean
 }
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
@@ -15,7 +24,16 @@ const DOW = ['일', '월', '화', '수', '목', '금', '토']
  * MiniCalendar 스타일의 드롭다운 날짜 선택기.
  * 기존 <input type="date"> 대신 사용합니다.
  */
-export default function DatePicker({ value, onChange, placeholder = '날짜 선택', className }: DatePickerProps) {
+export default function DatePicker({
+  value,
+  onChange,
+  placeholder = '날짜 선택',
+  className,
+  displayFormat = 'locale',
+  size = 'default',
+  portal = false,
+  triggerFullWidth = true,
+}: DatePickerProps) {
   const [open, setOpen] = useState(false)
   const today = new Date()
   // value가 "YYYY-MM-DD"이면 로컬 자정으로 파싱
@@ -23,12 +41,34 @@ export default function DatePicker({ value, onChange, placeholder = '날짜 선�
   const [viewYear, setViewYear] = useState(selected?.getFullYear() ?? today.getFullYear())
   const [viewMonth, setViewMonth] = useState(selected?.getMonth() ?? today.getMonth())
   const containerRef = useRef<HTMLDivElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const [portalPos, setPortalPos] = useState({ top: 0, left: 0 })
+
+  useLayoutEffect(() => {
+    if (!open || !portal) return
+    function update() {
+      const el = containerRef.current
+      if (!el) return
+      const r = el.getBoundingClientRect()
+      setPortalPos({ top: r.bottom + 4, left: r.left })
+    }
+    update()
+    window.addEventListener('scroll', update, true)
+    window.addEventListener('resize', update)
+    return () => {
+      window.removeEventListener('scroll', update, true)
+      window.removeEventListener('resize', update)
+    }
+  }, [open, portal])
 
   // 외부 클릭·ESC로 닫기
   useEffect(() => {
     if (!open) return
     function handleDown(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const t = e.target as Node
+      const inTrigger = containerRef.current?.contains(t)
+      const inPanel = panelRef.current?.contains(t)
+      if (!inTrigger && !inPanel) {
         setOpen(false)
       }
     }
@@ -76,33 +116,35 @@ export default function DatePicker({ value, onChange, placeholder = '날짜 선�
     setOpen(false)
   }
 
-  const displayValue = selected
-    ? selected.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })
-    : ''
+  const displayValue =
+    displayFormat === 'iso'
+      ? (value || '')
+      : selected
+        ? selected.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })
+        : ''
 
-  return (
-    <div ref={containerRef} className={clsx('relative', className)}>
-      {/* 트리거 버튼 */}
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="w-full h-10 px-3 rounded-lg border border-border bg-card text-sm outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent flex items-center gap-2 text-left"
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-label="날짜 선택"
-      >
-        <Calendar size={14} className="text-muted-foreground shrink-0" />
-        <span className={displayValue ? 'text-foreground' : 'text-muted-foreground'}>
-          {displayValue || placeholder}
-        </span>
-      </button>
+  const triggerClass = clsx(
+    'flex items-center outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent text-left',
+    size === 'compact'
+      ? 'h-8 min-h-8 px-2 rounded-md border border-border bg-transparent text-mini gap-1.5'
+      : 'h-10 px-3 rounded-lg border border-border bg-card text-sm gap-2',
+    triggerFullWidth
+      ? 'w-full'
+      : size === 'compact'
+        ? 'w-auto min-w-[6.75rem]'
+        : 'w-auto min-w-[10rem]',
+  )
 
-      {/* 드롭다운 달력 */}
-      {open && (
+  const calendarPanel = open ? (
         <div
+          ref={panelRef}
           role="dialog"
           aria-label="날짜 선택 달력"
-          className="absolute left-0 top-full mt-1 z-50 bg-card border border-border rounded-lg shadow-lg p-3 w-64"
+          className={clsx(
+            'z-[100] bg-card border border-border rounded-lg shadow-lg p-3 w-64',
+            portal ? 'fixed' : 'absolute left-0 top-full mt-1 z-50',
+          )}
+          style={portal ? { top: portalPos.top, left: portalPos.left } : undefined}
         >
           {/* 월 탐색 */}
           <div className="flex items-center justify-between mb-2">
@@ -199,7 +241,28 @@ export default function DatePicker({ value, onChange, placeholder = '날짜 선�
             </button>
           </div>
         </div>
-      )}
+  ) : null
+
+  return (
+    <div ref={containerRef} className={clsx(portal ? '' : 'relative', className)}>
+      {/* 트리거 버튼 */}
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={triggerClass}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-label="날짜 선택"
+      >
+        <Calendar size={size === 'compact' ? 12 : 14} className="text-muted-foreground shrink-0" />
+        <span className={clsx('min-w-0 truncate', displayValue ? 'text-foreground' : 'text-muted-foreground')}>
+          {displayValue || placeholder}
+        </span>
+      </button>
+
+      {portal && calendarPanel
+        ? createPortal(calendarPanel, document.body)
+        : calendarPanel}
     </div>
   )
 }
