@@ -121,8 +121,25 @@ export default function LivePage() {
   const [isEndingMeeting, setIsEndingMeeting] = useState(false);
   const [pendingNavigateToNotes, setPendingNavigateToNotes] = useState(false);
   const skipLeaveWarningRef = useRef(false);
+  /** 이번 라이브 세션에서 실질 발화가 있었는지 — 있으면 노트 이동 시 요약이 붙을 때까지 대기 */
+  const hadUtterancesDuringSessionRef = useRef(false);
 
   const displaySegments = diarization;
+
+  useEffect(() => {
+    for (const seg of diarization) {
+      if (String(seg.content ?? "").trim()) {
+        hadUtterancesDuringSessionRef.current = true;
+        return;
+      }
+    }
+  }, [diarization]);
+
+  useEffect(() => {
+    if (liveText.trim()) {
+      hadUtterancesDuringSessionRef.current = true;
+    }
+  }, [liveText]);
   const showEndingModal =
     (isEndingMeeting && wsStatus !== "error") || pendingNavigateToNotes;
 
@@ -307,8 +324,8 @@ export default function LivePage() {
     }
   }, [wsStatus, isEndingMeeting, meetingId]);
 
-  // 회의 종료 후: 요약이 있으면 이동, 없어도 서버에서 completed면 이동(파이프라인 실패 대비).
-  // 요청 타임아웃·최대 대기 후에는 무조건 노트 화면으로 이동.
+  // 회의 종료 후: 발화가 있었으면 요약이 생길 때까지 이동하지 않음. 발화 없으면 completed면 이동.
+  // 요청 타임아웃·최대 대기 후에는 노트로 이동(요약 실패·지연 대비).
   useEffect(() => {
     if (!pendingNavigateToNotes) return;
     const workspaceId = getCurrentWorkspaceId();
@@ -316,8 +333,9 @@ export default function LivePage() {
     let cancelled = false;
 
     const FETCH_MS = 12_000;
-    const POLL_MS = 2_500;
-    const MAX_WAIT_MS = 90_000;
+    const waitForSummary = hadUtterancesDuringSessionRef.current;
+    const POLL_MS = waitForSummary ? 1_500 : 2_500;
+    const MAX_WAIT_MS = waitForSummary ? 180_000 : 90_000;
 
     function fetchDetailWithTimeout(): Promise<Meeting> {
       return Promise.race([
@@ -329,7 +347,10 @@ export default function LivePage() {
     }
 
     function shouldNavigate(detail: Meeting): boolean {
-      const sum = detail.summary?.trim();
+      const sum = Boolean(detail.summary?.trim());
+      if (waitForSummary) {
+        return sum;
+      }
       if (sum) return true;
       return detail.status === "completed";
     }

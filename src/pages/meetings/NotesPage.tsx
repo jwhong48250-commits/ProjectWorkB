@@ -120,15 +120,58 @@ export default function NotesPage() {
   const noTranscriptAfterLoad =
     !utterancesLoading && !utterancesError && utterances.length === 0;
 
+  // 라이브 등에서 넘어온 location.state는 요약·상태가 옛날 수 있음 → 항상 서버에서 최신 회의 상세를 받음.
+  // passedMeeting이 있으면 초기 화면만 빠르게 보여 주고, 스피너는 띄우지 않음.
   useEffect(() => {
-    if (!meetingId || passedMeeting !== null) return;
+    if (!meetingId) return;
     const wsId = getCurrentWorkspaceId();
     if (!wsId) return;
-    fetchWorkspaceMeetingDetail(wsId, Number(meetingId))
-      .then(setMeeting)
-      .catch(() => setMeeting(null))
-      .finally(() => setMeetingLoading(false));
-  }, [meetingId]);
+
+    let cancelled = false;
+    const timeoutIds: ReturnType<typeof setTimeout>[] = [];
+
+    if (passedMeeting === null) {
+      setMeetingLoading(true);
+    }
+
+    const mid = Number(meetingId);
+    fetchWorkspaceMeetingDetail(wsId, mid)
+      .then((detail) => {
+        if (cancelled) return;
+        setMeeting(detail);
+        // 요약 파이프라인이 늦게 붙는 경우: 완료인데 요약 없으면 짧게 두 번 더 당김
+        if (
+          detail.status === "completed" &&
+          !detail.summary?.trim()
+        ) {
+          for (const delay of [2500, 6000]) {
+            timeoutIds.push(
+              setTimeout(() => {
+                if (cancelled) return;
+                fetchWorkspaceMeetingDetail(wsId, mid)
+                  .then((d) => {
+                    if (!cancelled) setMeeting(d);
+                  })
+                  .catch(() => {});
+              }, delay),
+            );
+          }
+        }
+      })
+      .catch(() => {
+        if (!cancelled && passedMeeting === null) setMeeting(null);
+      })
+      .finally(() => {
+        if (!cancelled) setMeetingLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      timeoutIds.forEach(clearTimeout);
+    };
+    // passedMeeting은 초기 로딩 스피너만 결정(클로저). 진입마다 location.key로 재조회.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meetingId, location.key]);
 
   function moveTranscript(position: "top" | "bottom") {
     if (utterances.length === 0) return;
