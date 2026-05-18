@@ -1,0 +1,129 @@
+# =================================================================
+# [Python 관련] - 컴파일된 파일 및 캐시 (무조건 제외)
+# =================================================================
+__pycache__/
+tempCodeRunnerFile.py
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# =================================================================
+# [가상환경] - 팀원마다 각자 설치해야 하므로 공유 금지
+# =================================================================
+venv/
+.venv/
+env/
+ENV/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# =================================================================
+# [보안 & 설정] - API 키, 비밀번호 (절대! 절대! 올리지 마세요)
+# =================================================================
+.env
+.env.test
+.env.production
+.env.*
+!.env.example
+secrets.json
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*.der
+credentials.json
+token.json
+
+# =================================================================
+# [IDE & 에디터] - 개인 취향 설정 (충돌 방지)
+# =================================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+.project
+.pydevproject
+.settings/
+.cursorignore
+
+# =================================================================
+# [에이전트/도구 설정] - 로컬 개인 설정 파일
+# =================================================================
+/.cursor/
+/.claude/
+/.vscode/
+/.cursorrules
+/AGENTS.md
+/docs/
+CLAUDE.md
+
+# =================================================================
+# [데이터베이스 및 로그] - AI 에이전트 실행 시 생성되는 로컬 데이터
+# =================================================================
+*.db
+*.sqlite3
+*.sqlite
+*.db-shm
+*.db-wal
+*.sqlite-shm
+*.sqlite-wal
+logs/
+*.log
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+
+# [Vector DB 관련 임시 데이터]
+data/
+chroma/
+pinecone_cache/
+
+# code-review-graph (코드 리뷰 그래프 MCP/CLI — 로컬 그래프 DB·캐시·인덱스)
+.code-review-graph/
+
+# =================================================================
+# [OS 관련] - 맥/윈도우 시스템 파일
+# =================================================================
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+desktop.ini
+
+# 그래프 구조 시각화 이미지
+*.png
+
+#---------개인 폴더----------
+dj/
+.vscode/settings.json
+a.txt
+scripts/slack_test.py
+.venv
+
+# ------- 저장소 ----------------
+# 업로드/생성 산출물은 저장소에 포함하지 않음
+storage/**
+!storage/.gitkeep

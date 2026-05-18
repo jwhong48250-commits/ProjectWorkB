@@ -1,0 +1,65 @@
+# Web Framework
+fastapi==0.115.9
+uvicorn[standard]==0.44.0
+python-multipart==0.0.24
+
+# AI & Agents
+langchain>=1.2.15
+langchain-community
+langchain-text-splitters>=0.3.0
+langchain-openai==1.1.12
+langchain-anthropic==1.4.0
+langgraph==1.1.6
+langsmith==0.7.26
+openai==2.30.0
+anthropic==0.89.0
+
+# Search & Tools
+tavily-python==0.7.23
+python-jose[cryptography]==3.5.0
+passlib[bcrypt]==1.7.4
+
+# Database & ORM
+sqlalchemy==2.0.49
+PyMySQL==1.1.1
+pydantic-settings==2.13.1
+pydantic[email]==2.12.5
+
+# Vector DB
+chromadb==1.0.7
+
+# MongoDB
+motor==3.7.0
+
+# Cacheß
+redis==7.4.0
+
+# AWS S3
+boto3==1.35.49
+
+# Utils & Formatting
+python-dotenv==1.2.2
+httpx==0.28.1
+pytest==8.3.5
+pytest-asyncio==0.24.0
+pdf2image==1.17.0
+python-pptx==1.0.2
+pypdf==6.10.2
+beautifulsoup4==4.12.3      # HTML 태그 제거 후 본문 추출
+markdown==3.10.2
+openpyxl==3.1.5
+Pillow>=10.0.0
+PyMuPDF>=1.24.0
+reportlab>=4.2.0            # 회의 요약 PDF 생성
+playwright>=1.40.0
+jinja2>=3.1.0
+
+# Scripts & Evaluation
+matplotlib>=3.8.0
+numpy>=1.26.0
+transformers>=5.5.4
+torch>=2.2.0
+sentencepiece>=0.2.0
+markdown==3.10.2
+openpyxl==3.1.5
+docx==0.2.4

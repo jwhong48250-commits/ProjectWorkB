@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<style>
+{% if reg_font_url %}
+@font-face {
+  font-family: 'NG';
+  src: url('{{ reg_font_url }}') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+{% endif %}
+{% if bold_font_url %}
+@font-face {
+  font-family: 'NG';
+  src: url('{{ bold_font_url }}') format('truetype');
+  font-weight: bold;
+  font-style: normal;
+}
+{% endif %}
+
+@page {
+  size: A4;
+  margin: 15mm 14mm 12mm 14mm;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'NG', 'NanumGothic', 'Apple SD Gothic Neo', sans-serif;
+  font-size: 8.5pt;
+  color: #000;
+  line-height: 1.45;
+}
+
+/* ── 제목 ───────────────────────────────────────────── */
+.doc-title {
+  font-size: 22pt;
+  font-weight: bold;
+  margin-bottom: 10pt;
+  letter-spacing: 0.03em;
+}
+
+/* ── 공통 테이블 ─────────────────────────────────────── */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  margin-bottom: 5pt;
+}
+
+td {
+  padding: 3pt 5pt;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+/* 라벨 열: 모든 섹션 동일 너비(colgroup 26mm). 긴 라벨(액션 아이템) 대비 줄바꿈 허용 */
+.lbl {
+  font-weight: bold;
+  font-size: 9pt;
+  vertical-align: middle;
+  white-space: normal;
+  text-align: center;
+  word-break: keep-all;
+}
+
+.col-hdr {
+  font-weight: bold;
+  font-size: 8pt;
+  vertical-align: middle;
+  padding: 2pt 5pt;
+}
+
+/* ── 메타 테이블 (회의일시/부서/작성자/참석자) ─────────── */
+/* border-collapse:separate → 참석자 행 왼쪽 라인이 끊기지 않음 */
+.t-meta {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.t-meta td {
+  border-right: 0.4pt solid #C0C0C0;
+  border-bottom: 0.4pt solid #C0C0C0;
+  vertical-align: middle;
+  font-size: 8pt;
+}
+.t-meta td:first-child   { border-left: 0.4pt solid #000; }
+.t-meta td:last-child    { border-right: 0.4pt solid #000; }
+.t-meta tr:first-child td { border-top: 0.75pt solid #000; }
+.t-meta tr:last-child td  { border-bottom: 0.4pt solid #000; }
+.t-meta .lbl { font-size: 8.5pt; }
+
+/* ── 섹션 테이블 공통 ───────────────────────────────── */
+/* border-collapse:separate + border-spacing:0 → rowspan 영역에 중간 가로선이
+   겹치지 않음. collapse는 rowspan 셀 내부에 인접 행 border가 bleeding되는
+   Playwright 렌더링 문제를 일으킬 수 있다. */
+.t-sec,
+.t-dec {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+/* 기본: 우측·하단 border만 */
+.t-sec td,
+.t-dec td {
+  border-right: 0.4pt solid #C0C0C0;
+  border-bottom: 0.4pt solid #C0C0C0;
+}
+
+/* 외곽선 — 검은색 / 내부 구분선 — 회색
+   좌측은 td:first-child 대신 .lbl을 사용.
+   rowspan이 있는 t-dec 데이터 행은 content td가 DOM상 first-child이므로
+   td:first-child를 쓰면 내부 경계선이 검은색이 되는 버그가 발생한다. */
+.t-sec .lbl,
+.t-dec .lbl {
+  border-left: 0.4pt solid #000;    /* 좌측 외곽 */
+  border-bottom: 0.4pt solid #000;  /* rowspan label 하단 = 섹션 외곽 하단 */
+  vertical-align: middle;
+}
+.t-sec td:last-child,
+.t-dec td:last-child {
+  border-right: 0.4pt solid #000;   /* 우측 외곽 */
+}
+.t-sec tr:last-child td,
+.t-dec tr:last-child td {
+  border-bottom: 0.4pt solid #000;  /* 하단 외곽 */
+}
+/* 각 섹션 첫 행 상단: 두꺼운 검정 선 */
+.t-sec tr:first-child td,
+.t-dec tr:first-child td {
+  border-top: 0.75pt solid #000;
+}
+
+/* 내용 셀 공통 */
+.cell {
+  vertical-align: top;
+  font-size: 8.5pt;
+  line-height: 1.55;
+}
+
+/* 마크다운 렌더링 요소 */
+.cell p { margin: 0 0 3pt; }
+.cell p:last-child { margin-bottom: 0; }
+.cell h1, .cell h2, .cell h3, .cell h4 {
+  font-size: 9pt;
+  font-weight: bold;
+  margin: 8pt 0 4pt;
+}
+/* nl2br 확장이 heading 뒤에 생성하는 불필요한 <br> 숨김 */
+.cell h1 + br, .cell h2 + br, .cell h3 + br, .cell h4 + br { display: none; }
+.cell ul, .cell ol {
+  padding-left: 13pt;
+  margin: 2pt 0;
+}
+.cell li { margin: 1.5pt 0; }
+.cell strong { font-weight: bold; }
+.cell em { font-style: italic; }
+.cell code {
+  font-family: monospace;
+  font-size: 8pt;
+  background: #f4f4f4;
+  padding: 0 2pt;
+}
+.cell table { margin: 3pt 0; font-size: 8pt; }
+.cell-dec p { margin: 0; }
+
+/* 회의안건·회의내용·특이사항 — 내용이 비어 있어도 동일 최소 높이·여백 */
+.cell-agenda,
+.cell-content,
+.cell-notes {
+  min-height: 92pt;
+  padding-bottom: 32pt;
+  box-sizing: border-box;
+}
+.cell-dec       { padding: 3pt 5pt; font-size: 8.5pt; vertical-align: middle; }
+.cell-dec-inner { display: block; min-height: 1.45em; }
+
+/* 모든 본문 섹션 라벨 열 동일 너비 (액션 아이템/결정사항 등) */
+.col-lbl { width: 26mm; }
+
+.photo-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6pt;
+}
+
+.photo-item {
+  border: 0.4pt solid #C0C0C0;
+  padding: 2pt;
+  min-height: 70pt;
+}
+
+.photo-item img {
+  display: block;
+  width: 100%;
+  max-height: 180pt;
+  object-fit: cover;
+}
+</style>
+</head>
+<body>
+
+<div class="doc-title">회의록</div>
+
+<!-- ── 메타 정보 ──────────────────────────────────── -->
+<table class="t-meta">
+  <colgroup>
+    <col class="col-lbl"><!-- 회의일시 · 작성자 등 lbl (26mm) -->
+    <col style="width:53mm"><!-- 날짜 val — 라벨 확장에 맞춤 -->
+    <col class="col-lbl">
+    <col>                   <!-- 작성자 val    -->
+  </colgroup>
+  <tbody>
+    <tr>
+      <td class="lbl">회의일시</td>
+      <td>{{ datetime }}</td>
+      <td class="lbl">작성자</td>
+      <td>{{ author_full }}</td>
+    </tr>
+    <tr>
+      <td class="lbl">참석자</td>
+      <td colspan="3">{{ attendees }}</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ── 회의안건 ───────────────────────────────────── -->
+<table class="t-sec">
+  <colgroup>
+    <col class="col-lbl">
+    <col>
+  </colgroup>
+  <tbody>
+    <tr>
+      <td class="lbl">회의안건</td>
+      <td class="cell cell-agenda">{{ agenda_items }}</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ── 회의내용 ───────────────────────────────────── -->
+<table class="t-sec">
+  <colgroup>
+    <col class="col-lbl">
+    <col>
+  </colgroup>
+  <tbody>
+    <tr>
+      <td class="lbl">회의내용</td>
+      <td class="cell cell-content">{{ discussion_content }}</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ── 결정사항 ───────────────────────────────────── -->
+<table class="t-dec">
+  <colgroup>
+    <col class="col-lbl">
+    <col>
+  </colgroup>
+  <tbody>
+    {% for row in decision_rows %}
+    <tr>
+      {% if loop.first %}<td class="lbl" rowspan="{{ decision_rows|length }}">결정사항</td>{% endif %}
+      <td class="cell-dec">
+        <span class="cell-dec-inner">{% if row %}{{ row }}{% else %}&nbsp;{% endif %}</span>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+
+<!-- ── 액션 아이템 (결정사항과 동일 row 구조) ─────── -->
+<table class="t-dec">
+  <colgroup>
+    <col class="col-lbl">
+    <col>
+  </colgroup>
+  <tbody>
+    {% for row in action_rows %}
+    <tr>
+      {% if loop.first %}<td class="lbl" rowspan="{{ action_rows|length }}">액션 아이템</td>{% endif %}
+      <td class="cell-dec">
+        <span class="cell-dec-inner">{% if row %}{{ row }}{% else %}&nbsp;{% endif %}</span>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+
+<!-- ── 회의 사진 ───────────────────────────────────── -->
+{% if photo_urls %}
+<table class="t-sec">
+  <colgroup>
+    <col class="col-lbl">
+    <col>
+  </colgroup>
+  <tbody>
+    <tr>
+      <td class="lbl">회의 사진</td>
+      <td class="cell">
+        <div class="photo-grid">
+          {% for photo_url in photo_urls %}
+          <div class="photo-item">
+            <img src="{{ photo_url }}" alt="meeting-photo-{{ loop.index }}">
+          </div>
+          {% endfor %}
+        </div>
+      </td>
+    </tr>
+  </tbody>
+</table>
+{% endif %}
+
+<!-- ── 특이사항 ───────────────────────────────────── -->
+<table class="t-sec">
+  <colgroup>
+    <col class="col-lbl">
+    <col>
+  </colgroup>
+  <tbody>
+    <tr>
+      <td class="lbl">특이사항</td>
+      <td class="cell cell-notes">{{ special_notes }}</td>
+    </tr>
+  </tbody>
+</table>
+
+</body>
+</html>
