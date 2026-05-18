@@ -1,0 +1,126 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Design tokens ──────────────────────────────────────────────────────────
+   HSL values only — no hsl() wrapper here, so Tailwind can inject opacity.
+   Reference: Linear's Root-*.css color system, adapted for Workb brand.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+@layer base {
+  :root {
+    /* Light mode — based on Projects.html reference variables */
+    --background: 240 20% 99%; /* #fcfcfd near-white */
+    --foreground: 220 8% 15%; /* #23252a */
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 8% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 8% 15%;
+
+    --muted: 0 0% 95%; /* #f2f2f2 */
+    --muted-foreground: 220 7% 50%; /* mid-gray */
+
+    --border: 0 0% 88%; /* #e0e0e0 */
+
+    --sidebar: 0 0% 96%; /* #f5f5f5 */
+    --sidebar-foreground: 220 8% 14%;
+    --sidebar-border: 0 0% 88%; /* #e0e0e0 */
+    --sidebar-hover: 0 0% 90%;
+    --sidebar-active: 237 85% 95%;
+
+    /* Brand point — #5668F3 */
+    --accent: 237 84% 63%;
+    --accent-foreground: 0 0% 100%;
+    --accent-subtle: 237 84% 95%;
+
+    --status-inprogress: 142 71% 38%;
+    --status-upcoming: 217 91% 55%;
+    --status-completed: 220 6% 58%;
+    --status-inprogress-bg: 142 55% 92%;
+    --status-upcoming-bg: 217 80% 93%;
+    --status-completed-bg: 220 6% 93%;
+  }
+
+  .dark {
+    /* Dark mode — based on Projects.html reference: sidebar #090909, base #0f0f11, border #1c1e21 */
+    --background: 240 7% 6%; /* #0e0f13 */
+    --foreground: 0 0% 97%; /* near-white */
+
+    --card: 240 6% 9%; /* #131318 */
+    --card-foreground: 0 0% 96%;
+
+    --popover: 240 6% 10%; /* slightly lifted from card for overlays */
+    --popover-foreground: 0 0% 96%;
+
+    --muted: 240 5% 12%; /* #1a1a20 */
+    --muted-foreground: 220 5% 44%; /* #6b6f76 */
+
+    --border: 220 7% 13%; /* #1d1e24 */
+
+    --sidebar: 240 5% 4%; /* #090911 near-black */
+    --sidebar-foreground: 0 0% 92%;
+    --sidebar-border: 220 7% 11%; /* very subtle */
+    --sidebar-hover: 240 4% 10%;
+    --sidebar-active: 237 30% 22%;
+
+    --accent: 237 84% 63%;
+    --accent-foreground: 0 0% 100%;
+    --accent-subtle: 237 28% 18%;
+
+    --status-inprogress: 142 65% 42%;
+    --status-upcoming: 217 85% 58%;
+    --status-completed: 220 5% 52%;
+    --status-inprogress-bg: 142 35% 12%;
+    --status-upcoming-bg: 217 45% 13%;
+    --status-completed-bg: 220 5% 16%;
+  }
+
+  /* Smooth dark/light transition */
+  html {
+    color-scheme: dark light;
+    /* 기본 선택값(md=18px)과 동일 — hydration 전 깜빡임 완화 */
+    font-size: 18px;
+  }
+
+  /* 글자 크기 3단계 — rem 기반 UI 전반과 함께 스케일 (작게=구 보통 16px 기준) */
+  html[data-font-scale="sm"] {
+    font-size: 16px;
+  }
+  html[data-font-scale="md"] {
+    font-size: 18px;
+  }
+  html[data-font-scale="lg"] {
+    font-size: 20px;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: theme("fontFamily.sans");
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-size: theme("fontSize.base[0]");
+    line-height: 1.5;
+  }
+
+  * {
+    box-sizing: border-box;
+    border-color: hsl(var(--border));
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-muted rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground;
+  }
+}

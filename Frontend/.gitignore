@@ -1,0 +1,57 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+coverage/
+docs/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files
+.env
+.env.*
+!.env.example
+.envrc
+
+# TypeScript
+*.tsbuildinfo
+
+# Vite cache
+.vite/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local tool settings
+.claude/
+.cursor/
+.turbo/
+.cache/
+.eslintcache
+CLAUDE.md
+
+# code-review-graph (코드 리뷰 그래프 MCP/CLI — 로컬 그래프 DB·캐시·인덱스)
+.code-review-graph/
+
+# Security artifacts
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*.der
+secrets.json
+credentials.json
+token.json
